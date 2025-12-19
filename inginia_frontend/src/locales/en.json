@@ -1,0 +1,13 @@
+{
+    "users_list": "Users List",
+    "add_user": "Add User",
+    "edit_user": "Edit User",
+    "delete_user": "Delete",
+    "login": "Login",
+  "register": "Register",
+  "email": "Email",
+  "password": "Password",
+  "confirm_password": "Confirm Password",
+  "name": "Name"
+  }
+  

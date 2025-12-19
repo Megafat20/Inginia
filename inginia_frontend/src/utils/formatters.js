@@ -1,0 +1,1 @@
+export const formatXOF = (value) => `${value.toLocaleString()} XOF`;
