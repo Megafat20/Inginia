@@ -25,6 +25,8 @@ class User extends Authenticatable
         'latitude',
         'longitude',
         'service',
+        'is_validated',
+        'is_agency',
     ];
 
     protected $hidden = [
@@ -64,6 +66,12 @@ class User extends Authenticatable
     public function reviewsReceived()
     {
         return $this->hasMany(Avis::class, 'prestataire_id');
+    }
+
+    // 🔹 Portfolio de réalisations
+    public function portfolios()
+    {
+        return $this->hasMany(Portfolio::class, 'provider_id');
     }
 
     // 🔹 Note moyenne calculée

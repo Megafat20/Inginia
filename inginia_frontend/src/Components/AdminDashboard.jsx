@@ -13,6 +13,7 @@ import {
   FaSearch,
   FaFilter,
   FaEllipsisV,
+  FaMapPin,
 } from "react-icons/fa";
 
 const AdminDashboard = () => {
@@ -55,7 +56,7 @@ const AdminDashboard = () => {
   return (
     <div className="w-full space-y-8 animate-fadeIn">
       {/* Upper Section / Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-6">
           <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-2xl shadow-inner">
             <FaUsers />
@@ -82,6 +83,22 @@ const AdminDashboard = () => {
             </h4>
           </div>
         </div>
+
+        <div
+          onClick={() => navigate("/admin/tracking")}
+          className="bg-emerald-600 p-6 rounded-3xl shadow-xl shadow-emerald-100 flex items-center justify-between text-white cursor-pointer hover:scale-105 transition-all"
+        >
+          <div>
+            <p className="text-xs font-black opacity-80 uppercase tracking-widest mb-1">
+              Live Ops
+            </p>
+            <h4 className="text-xl font-bold">Suivi Temps Réel</h4>
+          </div>
+          <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center">
+            <FaMapPin size={20} />
+          </div>
+        </div>
+
         <div className="bg-indigo-600 p-6 rounded-3xl shadow-xl shadow-indigo-100 flex items-center justify-between text-white">
           <div>
             <p className="text-xs font-black opacity-80 uppercase tracking-widest mb-1">

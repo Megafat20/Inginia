@@ -174,7 +174,7 @@ class ProviderController extends Controller
 
     public function getFullDashboard($id)
     {
-        $provider = User::with(['competances', 'professions'])->find($id);
+        $provider = User::with(['competances', 'professions', 'portfolios'])->find($id);
         if (!$provider) {
             return response()->json(['error' => 'Prestataire introuvable'], 404);
         }
@@ -184,7 +184,17 @@ class ProviderController extends Controller
             ->with('client:id,name,photo')
             ->latest()
             ->take(10)
-            ->get();
+            ->get()
+            ->map(function($r) {
+                return [
+                    'id' => $r->id,
+                    'rating' => $r->note,
+                    'comment' => $r->commentaire,
+                    'reviewer_name' => $r->client->name,
+                    'reviewer_photo' => $r->client->photo,
+                    'created_at' => $r->created_at,
+                ];
+            });
 
         // Réservations reçues avec info client et service
         $reservations = $provider->receivedReservations()
@@ -206,13 +216,22 @@ class ProviderController extends Controller
                 'location' => $provider->location,
                 'slogan' => $provider->slogan ?? null,
                 'min_price' => $provider->competances->min('price') ?? null,
-                'rating' => round($provider->reviewsReceived()->avg('note') ?? 0, 1),
+                'rating' => (float) round($provider->reviewsReceived()->avg('note') ?? 0, 1),
                 'professions' => $professions,
             ],
             'competances' => $provider->competances,
+            'portfolio' => $provider->portfolios->map(function($p) {
+                return [
+                    'id' => $p->id,
+                    'image' => $p->image_path,
+                    'title' => $p->title,
+                    'description' => $p->description,
+                ];
+            }),
             'stats' => [
                 'total_services' => $provider->competances()->count(),
                 'total_reviews' => $provider->reviewsReceived()->count(),
+                'total_completed' => $provider->receivedReservations()->where('status', 'completed')->count(),
             ],
             'reviews' => $reviews,
             'reservations' => $reservations,

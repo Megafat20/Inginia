@@ -85,21 +85,18 @@ class UserController extends Controller
         $user = $request->user();
 
         $data = $request->validate([
-            'nom' => 'nullable|string|max:255',
-            'prenom' => 'nullable|string|max:255',
-            'service' => 'nullable|string|max:255',
+            'name' => 'nullable|string|max:255',
             'email' => 'required|email|unique:users,email,'.$user->id,
-            'telephone' => 'nullable|string|max:20',
+            'phone' => 'nullable|string|max:20',
             'adresse' => 'nullable|string',
             'location' => 'nullable|string',
             'profession_ids' => 'nullable|array',
             'profession_ids.*' => 'exists:professions,id',
-            'competances' => 'nullable|array',
-            'competances.*' => 'exists:competances,id',
             'min_price' => 'nullable|numeric',
             'slogan' => 'nullable|string|max:255',
-            'is_agency' => 'boolean',
             'profile_photo' => 'nullable|image|max:2048',
+            'latitude' => 'nullable|numeric',
+            'longitude' => 'nullable|numeric',
         ]);
 
         // Maj infos simples

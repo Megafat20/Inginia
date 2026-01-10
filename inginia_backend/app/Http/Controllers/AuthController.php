@@ -40,6 +40,9 @@ class AuthController extends Controller
             'latitude' => $request->latitude,
             'longitude' => $request->longitude,
             'slogan' => $request->slogan,
+            'is_agency' => $request->is_agency ?? false,
+            // Prestataires need admin validation
+            'is_validated' => $request->role === 'prestataire' ? false : true,
         ]);
 
         // Attacher les professions si elles existent
@@ -82,7 +85,17 @@ class AuthController extends Controller
         if (! Auth::attempt($credentials)) {
             return response()->json(['error' => 'Email ou mot de passe invalide'], 401);
         }
+        
         $user = Auth::user();
+        
+        // Check if provider is validated
+        if ($user->role === 'prestataire' && !$user->is_validated) {
+            Auth::logout();
+            return response()->json([
+                'error' => 'Votre compte prestataire est en attente de validation par un administrateur.'
+            ], 403);
+        }
+        
         $token = $user->createToken('LaravelPassportToken')->accessToken;
 
         return response()->json(['message' => 'Connexion réussie', 'user' => $user, 'token' => $token]);

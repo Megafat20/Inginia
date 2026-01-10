@@ -51,7 +51,7 @@ Route::middleware('auth:api')->group(function () {
 
 
     Route::get('/users/{id}', [UserController::class, 'show']);
-    Route::put('/me', [UserController::class, 'update']);
+    Route::post('/me', [UserController::class, 'update']);
     Route::put('/me/password', [UserController::class, 'updatePassword']);
 
     Route::get('/avis/{prestataire_id}', [AvisController::class, 'show']);
@@ -69,10 +69,16 @@ Route::middleware('auth:api')->group(function () {
 
     Route::get('/provider/{id}/dashboard', [ProviderController::class, 'getFullDashboard']);
     Route::get('/provider/myprofessions', [ProviderController::class, 'myProfessions']);
+    
+    // Portfolio
+    Route::post('/provider/portfolio', [\App\Http\Controllers\Api\PortfolioController::class, 'store']);
+    Route::delete('/provider/portfolio/{id}', [\App\Http\Controllers\Api\PortfolioController::class, 'destroy']);
+
     // routes/api.php
     Route::get('/provider/reservations', [ReservationController::class, 'index']);
-    Route::patch('/provider/reservations/{id}', [ReservationController::class, 'updateStatus']);
+    Route::patch('/reservations/{id}/status', [ReservationController::class, 'updateStatus']);
     Route::get('/client/my-reservations', [ReservationController::class, 'getMyReservations']);
+
     Route::get('/reservations/{id}', [ReservationController::class, 'show']);
     Route::post('/reservations/{id}/location', [ReservationController::class, 'updateLocation']);
     Route::get('/client-reservations/{providerId}', [ReservationController::class, 'getClientReservationsForProvider']);
@@ -98,6 +104,23 @@ Route::middleware('auth:api')->group(function () {
     // SOS Urgence
     Route::post('/sos', [\App\Http\Controllers\SOSController::class, 'store']);
     Route::post('/sos/accept', [\App\Http\Controllers\SOSController::class, 'accept']);
+
+    // Reports / Litiges
+    Route::post('/reports', [\App\Http\Controllers\Api\ReportController::class, 'store']);
+
+
+    // Admin Tracking
+    Route::get('/admin/reservations/ongoing', [ReservationController::class, 'getOngoingReservations']);
+    
+    // Admin - Provider Validation Management
+    Route::middleware('role:admin')->prefix('admin')->group(function () {
+        Route::get('/dashboard/stats', [\App\Http\Controllers\AdminController::class, 'getDashboardStats']);
+        Route::get('/providers/pending', [\App\Http\Controllers\AdminController::class, 'getPendingProviders']);
+        Route::get('/providers/validated', [\App\Http\Controllers\AdminController::class, 'getValidatedProviders']);
+        Route::post('/providers/{id}/validate', [\App\Http\Controllers\AdminController::class, 'validateProvider']);
+        Route::delete('/providers/{id}/reject', [\App\Http\Controllers\AdminController::class, 'rejectProvider']);
+        Route::get('/users', [\App\Http\Controllers\AdminController::class, 'getAllUsers']);
+    });
 });     // Profil prestataire
 Route::get('/professions/populaires', [ProviderController::class, 'popularProfessions']);
 Route::get('/professions/{profession}/prestataires', [ProviderController::class, 'prestatairesByProfession']);

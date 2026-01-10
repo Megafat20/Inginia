@@ -1,0 +1,108 @@
+{
+  "editor.formatOnSave": true,
+  "editor.formatOnPaste": true,
+  "editor.rulers": [80, 120],
+  "editor.codeActionsOnSave": {
+    "source.fixAll": "explicit",
+    "source.organizeImports": "explicit"
+  },
+  
+  "[dart]": {
+    "editor.defaultFormatter": "Dart-Code.dart-code",
+    "editor.formatOnSave": true,
+    "editor.formatOnType": true,
+    "editor.rulers": [80],
+    "editor.selectionHighlight": false,
+    "editor.suggest.snippetsPreventQuickSuggestions": false,
+    "editor.suggestSelection": "first",
+    "editor.tabCompletion": "onlySnippets",
+    "editor.wordBasedSuggestions": "off"
+  },
+  
+  "dart.debugExternalPackageLibraries": false,
+  "dart.debugSdkLibraries": false,
+  "dart.lineLength": 80,
+  "dart.previewFlutterUiGuides": true,
+  "dart.previewFlutterUiGuidesCustomTracking": true,
+  "dart.showTodos": true,
+  
+  "files.associations": {
+    "*.dart": "dart"
+  },
+  
+  "files.exclude": {
+    "**/.dart_tool": true,
+    "**/.flutter-plugins": true,
+    "**/.flutter-plugins-dependencies": true,
+    "**/.packages": true,
+    "**/build": true
+  },
+  
+  "search.exclude": {
+    "**/.dart_tool": true,
+    "**/build": true,
+    "**/.flutter-plugins": true,
+    "**/.flutter-plugins-dependencies": true
+  },
+  
+  "files.watcherExclude": {
+    "**/.dart_tool/**": true,
+    "**/build/**": true
+  },
+  
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.patterns": {
+    "pubspec.yaml": "pubspec.lock, .flutter-plugins, .flutter-plugins-dependencies, .packages, .metadata",
+    "*.dart": "${capture}.g.dart, ${capture}.freezed.dart"
+  },
+  
+  "todo-tree.general.tags": [
+    "TODO",
+    "FIXME",
+    "NOTE",
+    "BUG",
+    "HACK"
+  ],
+  
+  "todo-tree.highlights.defaultHighlight": {
+    "icon": "alert",
+    "type": "text",
+    "foreground": "#FFFFFF",
+    "background": "#FF9800",
+    "opacity": 50,
+    "iconColour": "#FF9800"
+  },
+  
+  "todo-tree.highlights.customHighlight": {
+    "TODO": {
+      "icon": "check",
+      "foreground": "#FFFFFF",
+      "background": "#2196F3",
+      "iconColour": "#2196F3"
+    },
+    "FIXME": {
+      "icon": "alert",
+      "foreground": "#FFFFFF",
+      "background": "#F44336",
+      "iconColour": "#F44336"
+    },
+    "NOTE": {
+      "icon": "note",
+      "foreground": "#FFFFFF",
+      "background": "#4CAF50",
+      "iconColour": "#4CAF50"
+    },
+    "BUG": {
+      "icon": "bug",
+      "foreground": "#FFFFFF",
+      "background": "#FF5722",
+      "iconColour": "#FF5722"
+    },
+    "HACK": {
+      "icon": "flame",
+      "foreground": "#FFFFFF",
+      "background": "#FFC107",
+      "iconColour": "#FFC107"
+    }
+  }
+}

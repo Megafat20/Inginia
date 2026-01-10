@@ -14,6 +14,9 @@ import Register from "./Components/Auth/Register";
 import PrivateRoute from "./Components/PrivateRoute";
 
 import AdminDashboard from "./Components/AdminDashboard";
+import AdminDashboardNew from "./Components/Admin/AdminDashboardNew";
+import ProviderValidation from "./Components/Admin/ProviderValidation";
+import AdminTracking from "./Components/AdminTracking";
 import ProviderDashboard from "./Components/Providers/ProviderDashboard";
 import ProviderProfile from "./Components/Providers/ProviderProfile";
 import ClientDashboard from "./Components/Clients/ClientDashboard";
@@ -47,12 +50,38 @@ const AppRoutes = () => {
           <Route path="/search" element={<SearchResults />} />
           <Route path="/" element={<Home />} />
           {/* Admin */}
-          {/* Admin */}
           <Route
             path="/admin"
             element={
               <PrivateRoute role="admin">
+                <AdminDashboardNew />
+              </PrivateRoute>
+            }
+          />
+
+          <Route
+            path="/admin/providers/validation"
+            element={
+              <PrivateRoute role="admin">
+                <ProviderValidation />
+              </PrivateRoute>
+            }
+          />
+
+          <Route
+            path="/admin/users"
+            element={
+              <PrivateRoute role="admin">
                 <AdminDashboard />
+              </PrivateRoute>
+            }
+          />
+
+          <Route
+            path="/admin/tracking"
+            element={
+              <PrivateRoute role="admin">
+                <AdminTracking />
               </PrivateRoute>
             }
           />

@@ -10,7 +10,7 @@ class Avis extends Model
     use HasFactory;
     protected $table = 'avis';
 
-    protected $fillable = ['client_id', 'prestataire_id', 'note', 'commentaire'];
+    protected $fillable = ['client_id', 'prestataire_id', 'reservation_id', 'note', 'commentaire'];
 
     public function client()
     {

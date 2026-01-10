@@ -251,3 +251,19 @@ export const sendReservationMessage = async (reservationId, message) => {
     throw error;
   }
 };
+// Récupérer toutes les réservations en cours (pour l'admin)
+export const getOngoingReservations = async () => {
+  try {
+    const response = await axios.get(
+      `${API_URL}/admin/reservations/ongoing`,
+      getAuthHeaders()
+    );
+    return response.data.reservations || [];
+  } catch (error) {
+    console.error(
+      "Erreur lors de la récupération des réservations en cours :",
+      error
+    );
+    return [];
+  }
+};

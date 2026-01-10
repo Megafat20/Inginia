@@ -11,7 +11,7 @@ class SOSController extends Controller
     /**
      * Déclencher une alerte SOS
      */
-    public function store(Request $request)
+    public function store(Request $request, \App\Services\FcmService $fcmService)
     {
         $request->validate([
             'latitude' => 'required|numeric',
@@ -20,9 +20,10 @@ class SOSController extends Controller
             'description' => 'nullable|string',
         ]);
 
+        $user = Auth::user();
         $data = [
-            'user_id' => Auth::id(),
-            'user_name' => Auth::user()->name,
+            'user_id' => $user->id,
+            'user_name' => $user->name,
             'latitude' => $request->latitude,
             'longitude' => $request->longitude,
             'problem_type' => $request->problem_type,
@@ -33,11 +34,30 @@ class SOSController extends Controller
         try {
             broadcast(new UrgentRequestCreated($data))->toOthers();
         } catch (\Exception $e) {
-            // On loggue l'erreur mais on continue (Soft Fail)
             \Illuminate\Support\Facades\Log::error("Erreur Broadcast SOS: " . $e->getMessage());
         }
 
-        // (Optionnel) Ici on pourrait aussi sauvegarder en BDD dans une table 'urgent_requests'
+        // 🔔 Envoyer une notification Push aux prestataires à proximité (10km)
+        $providers = \App\Models\User::where('role', 'prestataire')
+            ->avecDistance($request->latitude, $request->longitude)
+            ->whereRaw("(6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude)))) <= 10", [$request->latitude, $request->longitude, $request->latitude])
+            ->get();
+
+        foreach ($providers as $provider) {
+            $tokens = $provider->deviceTokens()->where('revoked', false)->pluck('token');
+            if ($tokens->isNotEmpty()) {
+                try {
+                    $fcmService->sendNotification(
+                        $tokens->toArray(),
+                        "🚨 URGENCE SOS : " . $request->problem_type,
+                        "Un client a besoin d'aide immédiatement près de chez vous.",
+                        array_merge($data, ['type' => 'sos'])
+                    );
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::error("Erreur FCM SOS: " . $e->getMessage());
+                }
+            }
+        }
 
         return response()->json([
             'message' => 'Alerte SOS enregistrée (diffusion en cours...)',

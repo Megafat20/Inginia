@@ -5,15 +5,15 @@ namespace App\Http\Controllers;
 use App\Models\Reservation;
 use App\Models\User;
 use Illuminate\Http\Request;
-use App\Events\MessageSent;
+use App\Events\ReservationCreated;
+use App\Events\ReservationStatusUpdated;
 use App\Models\Message;
 use Illuminate\Support\Facades\Auth;
 use App\Services\FcmService;
+use App\Events\MessageSent;
+
 class ReservationController extends Controller
 {
-
-
-
     protected $fcm;
 
     public function __construct(FcmService $fcm)
@@ -68,22 +68,51 @@ class ReservationController extends Controller
         return response()->json(['reservations' => $reservations]);
     }
 
-    public function updateStatus(Request $request, $id, FcmService $fcm)
+    public function updateStatus(Request $request, $id)
     {
         $request->validate([
-            'status' => 'required|in:pending,accepted,declined,completed',
+            'status' => 'required|in:pending,accepted,declined,completed,cancelled',
+            'reason' => 'nullable|string|max:500', // Added for cancellation reason
         ]);
 
         $reservation = Reservation::with(['client', 'competance'])->findOrFail($id);
+        $user = auth()->user();
 
-        if ($reservation->provider_id !== auth()->id()) {
+        // Sécurité : Seul le client ou le prestataire lié peut modifier
+        if ($reservation->provider_id !== $user->id && $reservation->client_id !== $user->id) {
             return response()->json(['message' => 'Non autorisé'], 403);
         }
 
-        $reservation->status = $request->status;
+        $oldStatus = $reservation->status;
+        $newStatus = $request->status;
+
+        // Logique d'annulation
+        if ($newStatus === 'cancelled') {
+            $reservation->status = 'cancelled';
+            $reservation->cancellation_reason = $request->reason ?? 'Non spécifié';
+            $reservation->cancelled_at = now();
+            $reservation->cancelled_by = $user->id === $reservation->client_id ? 'client' : 'provider';
+            $reservation->save();
+
+            broadcast(new ReservationStatusUpdated($reservation))->toOthers();
+
+            return response()->json([
+                'message' => 'Réservation annulée',
+                'reservation' => $reservation
+            ]);
+        }
+
+        // Autres status : seul le prestataire peut les changer (accepté, en cours, terminé)
+        if ($reservation->provider_id !== $user->id) {
+            return response()->json(['message' => 'Seul le prestataire peut valider cette étape'], 403);
+        }
+
+        $reservation->status = $newStatus;
         $reservation->save();
 
-        if ($request->status === 'accepted') {
+        broadcast(new ReservationStatusUpdated($reservation))->toOthers();
+
+        if ($newStatus === 'accepted') {
             $reservation->load(['client', 'competance']);
             return response()->json([
                 'message' => 'Réservation acceptée',
@@ -95,18 +124,6 @@ class ReservationController extends Controller
             ]);
         }
 
-        // 🔔 Envoyer la notif
-        $title = "Réservation mise à jour";
-        $body = match ($request->status) {
-            'accepted' => "Le prestataire a accepté votre réservation",
-            'declined' => "Le prestataire a refusé votre réservation",
-            'completed' => "Votre réservation est terminée",
-            default => "Votre réservation est en attente",
-        };
-
-        if ($reservation->client && $reservation->client->fcm_token) {
-            $this->fcm->sendToToken($reservation->client->fcm_token, $title, $body);
-        }
         return response()->json([
             'message' => 'Statut mis à jour avec succès',
             'reservation' => $reservation,
@@ -149,6 +166,8 @@ class ReservationController extends Controller
         $reservation->client_lat = $request->input('latitude');
         $reservation->client_lng = $request->input('longitude');
         $reservation->save();
+
+        broadcast(new ReservationCreated($reservation))->toOthers();
 
         return response()->json([
             'message' => 'Réservation envoyée',
@@ -214,7 +233,7 @@ class ReservationController extends Controller
     }
 
 
-    public function sendMessage(Request $request, $reservationId, FcmService $fcmService)
+    public function sendMessage(Request $request, $reservationId)
     {
         $request->validate([
             'content' => 'required|string',
@@ -228,34 +247,6 @@ class ReservationController extends Controller
 
         broadcast(new MessageSent($message))->toOthers();
 
-        $reservation = Reservation::with(['client', 'provider'])->findOrFail($reservationId);
-        $recipient = $reservation->client_id === auth()->id()
-            ? $reservation->provider
-            : $reservation->client;
-
-        // Notif In-App instantanée
-        broadcast(new \App\Events\UserNotification(
-            $recipient->id,
-            "Nouveau message de " . auth()->user()->name,
-            $message->message,
-            ['type' => 'chat', 'reservation_id' => $reservationId]
-        ));
-
-        $recipientTokens = $recipient->deviceTokens()->where('revoked', false)->pluck('token');
-
-        if ($recipientTokens->isNotEmpty()) {
-            try {
-                // Utilisation correcte avec array
-                $fcmService->sendNotification(
-                    $recipientTokens->toArray(),
-                    "Nouveau message de " . auth()->user()->name,
-                    $message->message
-                );
-            } catch (\Exception $e) {
-                // Log silentieux pour ne pas bloquer l'envoi du message
-                \Illuminate\Support\Facades\Log::error("Erreur FCM Chat: " . $e->getMessage());
-            }
-        }
 
         return response()->json(['message' => $message], 201);
     }
@@ -289,6 +280,7 @@ class ReservationController extends Controller
             'provider_lng' => $request->longitude,
         ]);
 
+        // Diffuser la nouvelle position via WebSocket (Pusher/Reverb)
         broadcast(new \App\Events\ProviderLocationUpdated(
             Auth::id(),
             $reservation->id,
@@ -300,5 +292,20 @@ class ReservationController extends Controller
     }
 
 
+
+    public function getOngoingReservations()
+    {
+        // Seul l'admin peut voir toutes les réservations en cours
+        if (auth()->user()->role !== 'admin') {
+            return response()->json(['error' => 'Non autorisé'], 403);
+        }
+
+        $reservations = Reservation::with(['client', 'provider', 'competance'])
+            ->where('status', 'accepted') // On suit ceux qui sont acceptés (en route)
+            ->orderBy('updated_at', 'desc')
+            ->get();
+
+        return response()->json(['reservations' => $reservations]);
+    }
 
 }

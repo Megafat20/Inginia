@@ -19,6 +19,7 @@ Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
 
 
 Broadcast::channel('chat.{reservationId}', function ($user, $reservationId) {
+    if ($user->role === 'admin') return true;
     // Seul le client ou le prestataire de la réservation peut écouter le canal
     return \App\Models\Reservation::where('id', $reservationId)
             ->where(function($q) use ($user) {
@@ -27,7 +28,12 @@ Broadcast::channel('chat.{reservationId}', function ($user, $reservationId) {
             })->exists();
 }); 
 
+Broadcast::channel('user.{id}', function ($user, $id) {
+    return (int) $user->id === (int) $id;
+});
+
 Broadcast::channel('reservation.{id}', function ($user, $id) {
+    if ($user->role === 'admin') return true;
     return \App\Models\Reservation::where('id', $id)
             ->where(function($q) use ($user) {
                 $q->where('client_id', $user->id)

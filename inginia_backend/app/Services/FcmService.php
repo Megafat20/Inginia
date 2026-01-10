@@ -38,11 +38,12 @@ class FcmService
         $this->messaging->send($message->withChangedTarget('token', $token));
     }
 
-    public function sendNotification(array $tokens, string $title, string $body)
+    public function sendNotification(array $tokens, string $title, string $body, array $data = [])
     {
         foreach ($tokens as $token) {
             $message = CloudMessage::withTarget('token', $token)
-                ->withNotification(Notification::create($title, $body));
+                ->withNotification(Notification::create($title, $body))
+                ->withData($data);
 
             $this->messaging->send($message);
         }
