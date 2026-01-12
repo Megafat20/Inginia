@@ -6,6 +6,8 @@ import 'package:http/http.dart' as http;
 import '../models/reservation_model.dart';
 import '../services/websocket_service.dart';
 import '../theme/app_theme.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'dart:ui';
 
 class TrackingMapScreen extends StatefulWidget {
   final Reservation reservation;
@@ -50,13 +52,27 @@ class _TrackingMapScreenState extends State<TrackingMapScreen> {
         data,
       ) {
         if (data['latitude'] != null && data['longitude'] != null) {
+          if (!mounted) return;
           setState(() {
             _providerPos = LatLng(data['latitude'], data['longitude']);
           });
           _updateRoute();
+          _fitMap();
         }
       });
     }
+
+    // Auto-fit after a short delay
+    Future.delayed(const Duration(milliseconds: 500), _fitMap);
+  }
+
+  void _fitMap() {
+    if (_providerPos == null || _clientPos == null || !mounted) return;
+
+    final bounds = LatLngBounds(_providerPos!, _clientPos!);
+    _mapController.fitCamera(
+      CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(70)),
+    );
   }
 
   Future<void> _fetchRoute() async {
@@ -128,25 +144,71 @@ class _TrackingMapScreenState extends State<TrackingMapScreen> {
                   // Client Marker
                   Marker(
                     point: _clientPos!,
-                    width: 40,
-                    height: 40,
-                    child: const Icon(
-                      Icons.person_pin_circle,
-                      color: Colors.red,
-                      size: 40,
-                    ),
+                    width: 50,
+                    height: 50,
+                    child:
+                        Container(
+                              decoration: BoxDecoration(
+                                color: Colors.red.withOpacity(0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Center(
+                                child: Icon(
+                                  Icons.location_on_rounded,
+                                  color: Colors.red,
+                                  size: 30,
+                                ),
+                              ),
+                            )
+                            .animate(onPlay: (c) => c.repeat())
+                            .scale(
+                              duration: 1.seconds,
+                              begin: const Offset(0.8, 0.8),
+                              end: const Offset(1.1, 1.1),
+                              curve: Curves.easeInOut,
+                            )
+                            .then()
+                            .scale(
+                              duration: 1.seconds,
+                              begin: const Offset(1.1, 1.1),
+                              end: const Offset(0.8, 0.8),
+                              curve: Curves.easeInOut,
+                            ),
                   ),
                   // Provider Marker
                   if (_providerPos != null)
                     Marker(
                       point: _providerPos!,
-                      width: 40,
-                      height: 40,
-                      child: const Icon(
-                        Icons.directions_bike,
-                        color: AppTheme.primary,
-                        size: 40,
-                      ),
+                      width: 50,
+                      height: 50,
+                      child:
+                          Container(
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primary,
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppTheme.primary.withOpacity(0.4),
+                                      blurRadius: 10,
+                                      spreadRadius: 2,
+                                    ),
+                                  ],
+                                ),
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.directions_bike_rounded,
+                                    color: Colors.white,
+                                    size: 26,
+                                  ),
+                                ),
+                              )
+                              .animate(onPlay: (c) => c.repeat(reverse: true))
+                              .moveY(
+                                begin: -5,
+                                end: 0,
+                                duration: 600.ms,
+                                curve: Curves.easeInOut,
+                              ),
                     ),
                 ],
               ),
@@ -168,61 +230,106 @@ class _TrackingMapScreenState extends State<TrackingMapScreen> {
             ),
           // Info Overlay
           Positioned(
-            bottom: 20,
-            left: 20,
-            right: 20,
-            child: Card(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      backgroundColor: AppTheme.primary.withOpacity(0.1),
-                      child: Icon(
-                        widget.isProvider ? Icons.person : Icons.engineering,
-                        color: AppTheme.primary,
-                      ),
-                    ),
-                    const SizedBox(width: 15),
-                    Expanded(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.isProvider
-                                ? "Client: ${widget.reservation.clientName}"
-                                : "Prestataire: ${widget.reservation.providerName}",
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                bottom: 30,
+                left: 20,
+                right: 20,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    child: Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.85),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.2),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
                           ),
-                          Text(
-                            widget.isProvider
-                                ? "Destination d'intervention"
-                                : "En route vers vous",
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontSize: 12,
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primary.withOpacity(0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              widget.isProvider
+                                  ? Icons.person_rounded
+                                  : Icons.engineering_rounded,
+                              color: AppTheme.primary,
+                              size: 30,
+                            ),
+                          ),
+                          const SizedBox(width: 15),
+                          Expanded(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  widget.isProvider
+                                      ? widget.reservation.clientName ??
+                                            "Client"
+                                      : widget.reservation.providerName,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 18,
+                                    color: AppTheme.textPrimary,
+                                  ),
+                                ),
+                                Text(
+                                  widget.isProvider
+                                      ? "Destination d'intervention"
+                                      : "En route vers vous",
+                                  style: TextStyle(
+                                    color: AppTheme.textSecondary,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: AppTheme.primary,
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.my_location_rounded,
+                                color: Colors.white,
+                              ),
+                              onPressed: () {
+                                if (_providerPos != null) {
+                                  _fitMap();
+                                }
+                              },
                             ),
                           ),
                         ],
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.my_location),
-                      onPressed: () {
-                        if (_providerPos != null) {
-                          _mapController.move(_providerPos!, 15.0);
-                        }
-                      },
-                    ),
-                  ],
+                  ),
                 ),
+              )
+              .animate()
+              .fadeIn(delay: 500.ms)
+              .slideY(
+                begin: 0.5,
+                end: 0,
+                duration: 600.ms,
+                curve: Curves.easeOutBack,
               ),
-            ),
-          ),
         ],
       ),
     );

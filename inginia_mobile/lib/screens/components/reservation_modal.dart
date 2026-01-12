@@ -3,6 +3,7 @@ import '../../theme/app_theme.dart';
 import '../../models/provider_details_model.dart'; // For Competance model
 import '../../repositories/provider_repository.dart';
 import '../../services/location_service.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 class ReservationModal extends StatefulWidget {
   final int providerId;
@@ -157,10 +158,10 @@ class _ReservationModalState extends State<ReservationModal> {
                 "Réserver avec ${widget.providerName}",
                 style: const TextStyle(
                   fontSize: 22,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w900,
                   color: AppTheme.textDark,
                 ),
-              ),
+              ).animate().fadeIn(duration: 400.ms).slideX(begin: -0.1, end: 0),
               const SizedBox(height: 24),
 
               // 1. Choisir un service (Optionnel si vide)
@@ -171,7 +172,7 @@ class _ReservationModalState extends State<ReservationModal> {
                     fontWeight: FontWeight.bold,
                     color: AppTheme.textLight,
                   ),
-                ),
+                ).animate().fadeIn(delay: 100.ms),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
@@ -205,7 +206,7 @@ class _ReservationModalState extends State<ReservationModal> {
                       ),
                     );
                   }).toList(),
-                ),
+                ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.1, end: 0),
                 const SizedBox(height: 20),
               ],
 
@@ -233,23 +234,37 @@ class _ReservationModalState extends State<ReservationModal> {
                               vertical: 12,
                             ),
                             decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey.shade300),
+                              color: _selectedDate != null
+                                  ? AppTheme.primary.withOpacity(0.05)
+                                  : Colors.white,
+                              border: Border.all(
+                                color: _selectedDate != null
+                                    ? AppTheme.primary
+                                    : Colors.grey.shade300,
+                              ),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Row(
                               children: [
-                                const Icon(
+                                Icon(
                                   Icons.calendar_today,
                                   size: 18,
-                                  color: AppTheme.primary,
+                                  color: _selectedDate != null
+                                      ? AppTheme.primary
+                                      : Colors.grey,
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
                                   _selectedDate == null
                                       ? "Choisir date"
                                       : "${_selectedDate!.day}/${_selectedDate!.month}/${_selectedDate!.year}",
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
+                                  style: TextStyle(
+                                    fontWeight: _selectedDate != null
+                                        ? FontWeight.bold
+                                        : FontWeight.w600,
+                                    color: _selectedDate != null
+                                        ? AppTheme.primary
+                                        : Colors.grey.shade700,
                                   ),
                                 ),
                               ],
@@ -281,23 +296,37 @@ class _ReservationModalState extends State<ReservationModal> {
                               vertical: 12,
                             ),
                             decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey.shade300),
+                              color: _selectedTime != null
+                                  ? AppTheme.primary.withOpacity(0.05)
+                                  : Colors.white,
+                              border: Border.all(
+                                color: _selectedTime != null
+                                    ? AppTheme.primary
+                                    : Colors.grey.shade300,
+                              ),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Row(
                               children: [
-                                const Icon(
+                                Icon(
                                   Icons.access_time,
                                   size: 18,
-                                  color: AppTheme.primary,
+                                  color: _selectedTime != null
+                                      ? AppTheme.primary
+                                      : Colors.grey,
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
                                   _selectedTime == null
                                       ? "Choisir heure"
                                       : _selectedTime!.format(context),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
+                                  style: TextStyle(
+                                    fontWeight: _selectedTime != null
+                                        ? FontWeight.bold
+                                        : FontWeight.w600,
+                                    color: _selectedTime != null
+                                        ? AppTheme.primary
+                                        : Colors.grey.shade700,
                                   ),
                                 ),
                               ],
@@ -308,7 +337,7 @@ class _ReservationModalState extends State<ReservationModal> {
                     ),
                   ),
                 ],
-              ),
+              ).animate().fadeIn(delay: 300.ms),
               const SizedBox(height: 20),
 
               // 3. Description
@@ -318,13 +347,15 @@ class _ReservationModalState extends State<ReservationModal> {
                   fontWeight: FontWeight.bold,
                   color: AppTheme.textLight,
                 ),
-              ),
+              ).animate().fadeIn(delay: 400.ms),
               const SizedBox(height: 8),
               TextFormField(
                 controller: _descriptionController,
                 maxLines: 3,
                 decoration: InputDecoration(
                   hintText: "Décrivez votre besoin en quelques mots...",
+                  fillColor: Colors.grey.shade50,
+                  filled: true,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide(color: Colors.grey.shade300),
@@ -344,34 +375,49 @@ class _ReservationModalState extends State<ReservationModal> {
                   }
                   return null;
                 },
-              ),
+              ).animate().fadeIn(delay: 500.ms),
               const SizedBox(height: 30),
 
               // Button
               SizedBox(
-                width: double.infinity,
-                height: 54,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _submit,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text(
-                          "Envoyer la demande",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
+                    width: double.infinity,
+                    height: 54,
+                    child: ElevatedButton(
+                      onPressed: _isLoading ? null : _submit,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                ),
-              ),
+                        elevation: 0,
+                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              height: 24,
+                              width: 24,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 3,
+                              ),
+                            )
+                          : const Text(
+                              "Confirmer la réservation",
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 17,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                    ),
+                  )
+                  .animate()
+                  .fadeIn(delay: 600.ms)
+                  .scale(
+                    begin: const Offset(0.9, 0.9),
+                    end: const Offset(1, 1),
+                    curve: Curves.easeOutBack,
+                  ),
               const SizedBox(height: 40),
             ],
           ),

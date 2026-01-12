@@ -5,6 +5,8 @@ import '../providers/provider_list_provider.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:shimmer/shimmer.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'provider_detail_screen.dart';
 import 'mission_screen.dart';
 import 'client_profile_screen.dart';
@@ -24,6 +26,8 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   String _activeCategory = 'all';
+  String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
   String _sortOption = 'rating_desc';
   bool _showFavoritesOnly = false;
 
@@ -70,6 +74,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
   @override
   void dispose() {
     _tabController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -586,7 +591,9 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
                     children: [
                       Expanded(
                         child: TextField(
-                          onChanged: (value) => setState(() {}),
+                          controller: _searchController,
+                          onChanged: (value) =>
+                              setState(() => _searchQuery = value),
                           style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w600,
@@ -602,6 +609,19 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
                               color: AppTheme.accent,
                               size: 24,
                             ),
+                            suffixIcon: _searchQuery.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(
+                                      Icons.close_rounded,
+                                      color: Colors.white,
+                                      size: 20,
+                                    ),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      setState(() => _searchQuery = '');
+                                    },
+                                  )
+                                : null,
                             border: InputBorder.none,
                             contentPadding: const EdgeInsets.symmetric(
                               horizontal: 20,
@@ -653,7 +673,11 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
       // Filtre Catégorie
       bool matchesCategory = true;
       if (_activeCategory != 'all') {
-        // On cherche le nom de la profession sélectionnée
+        final categoryId = int.tryParse(_activeCategory);
+        final matchById =
+            categoryId != null && provider.professionIds.contains(categoryId);
+
+        // On cherche le nom de la profession sélectionnée pour le fallback par nom
         final category = _professions.firstWhere(
           (p) => p['id'].toString() == _activeCategory.toString(),
           orElse: () => {'name': ''},
@@ -662,8 +686,16 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
 
         // On vérifie si le service du provider correspond
         final serviceName = (provider.serviceName ?? '').toLowerCase();
-        // Ou si le nom du provider contient le mot clé (recherche large)
-        matchesCategory = serviceName.contains(categoryName);
+        final professionNames = provider.professionNames
+            .map((n) => n.toLowerCase())
+            .toList();
+
+        // On vérifie si la catégorie correspond soit au service, soit à une des professions
+        final matchByName =
+            serviceName.contains(categoryName) ||
+            professionNames.any((name) => name.contains(categoryName));
+
+        matchesCategory = matchById || matchByName;
       }
 
       // Filtre Favoris
@@ -672,7 +704,23 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
         matchesFavorites = _favoriteIds.contains(provider.id);
       }
 
-      return matchesCategory && matchesFavorites;
+      // Filtre Recherche (Nom ou Service)
+      bool matchesSearch = true;
+      if (_searchQuery.isNotEmpty) {
+        final query = _searchQuery.toLowerCase();
+        final name = provider.name.toLowerCase();
+        final service = (provider.serviceName ?? '').toLowerCase();
+        final profs = provider.professionNames
+            .map((n) => n.toLowerCase())
+            .toList();
+
+        matchesSearch =
+            name.contains(query) ||
+            service.contains(query) ||
+            profs.any((p) => p.contains(query));
+      }
+
+      return matchesCategory && matchesFavorites && matchesSearch;
     }).toList();
 
     // Tri
@@ -692,293 +740,302 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
       }
     });
 
-    return SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Category Filters
-            Row(
-              children: [
-                Container(
-                  width: 4,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: AppTheme.primary,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Text(
-                  'Catégories populaires',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                    color: AppTheme.textPrimary,
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 16),
-
-            SizedBox(
-              height: 42,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
+    return RefreshIndicator(
+      onRefresh: () async {
+        await Future.wait([providerListProvider.fetchProviders(), _loadData()]);
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Category Filters
+              Row(
                 children: [
-                  _buildCategoryChip('Tout voir', 'all'),
-                  ..._professions.map(
-                    (cat) =>
-                        _buildCategoryChip(cat['name']!, cat['id'].toString()),
+                  Container(
+                    width: 4,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Catégories populaires',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      color: AppTheme.textPrimary,
+                    ),
                   ),
                 ],
               ),
-            ),
 
-            const SizedBox(height: 24),
+              const SizedBox(height: 16),
 
-            // Prestataires à proximité (New Section)
-            if (providerListProvider.providers.isNotEmpty) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              SizedBox(
+                height: 42,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
                   children: [
-                    const Text(
-                      'À proximité',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textPrimary,
+                    _buildCategoryChip('Tout voir', 'all'),
+                    ..._professions.map(
+                      (cat) => _buildCategoryChip(
+                        cat['name']!,
+                        cat['id'].toString(),
                       ),
                     ),
-                    // Filtre par rayon
-                    if (_userPosition != null)
-                      PopupMenuButton<double>(
-                        initialValue: _radiusFilter,
-                        onSelected: (value) =>
-                            setState(() => _radiusFilter = value),
-                        icon: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppTheme.primary.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.tune,
-                                size: 16,
-                                color: AppTheme.primary,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                '${_radiusFilter.toInt()}km',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppTheme.primary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        itemBuilder: (context) => [
-                          const PopupMenuItem(
-                            value: 5.0,
-                            child: Text('📍 5 km'),
-                          ),
-                          const PopupMenuItem(
-                            value: 10.0,
-                            child: Text('📍 10 km'),
-                          ),
-                          const PopupMenuItem(
-                            value: 20.0,
-                            child: Text('📍 20 km'),
-                          ),
-                          const PopupMenuItem(
-                            value: 50.0,
-                            child: Text('📍 50 km'),
-                          ),
-                        ],
-                      ),
                   ],
                 ),
               ),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: 210, // Hauteur ajustée pour inclure la distance
-                child: Builder(
-                  builder: (context) {
-                    // Trier et filtrer les prestataires par distance
-                    List<User> nearbyProviders = providerListProvider.providers;
 
-                    if (_userPosition != null) {
-                      // Filtrer par rayon
-                      nearbyProviders = LocationService.filterByRadius(
-                        nearbyProviders,
-                        _userPosition!.latitude,
-                        _userPosition!.longitude,
-                        _radiusFilter,
-                      );
+              const SizedBox(height: 24),
 
-                      // Trier par distance
-                      nearbyProviders = LocationService.sortByDistance(
-                        nearbyProviders,
-                        _userPosition!.latitude,
-                        _userPosition!.longitude,
-                      );
-                    }
-
-                    // Limiter à 10 prestataires
-                    nearbyProviders = nearbyProviders.take(10).toList();
-
-                    if (nearbyProviders.isEmpty) {
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.location_off,
-                              size: 48,
-                              color: Colors.grey.shade400,
+              // Prestataires à proximité (New Section)
+              if (providerListProvider.providers.isNotEmpty) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'À proximité',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      // Filtre par rayon
+                      if (_userPosition != null)
+                        PopupMenuButton<double>(
+                          initialValue: _radiusFilter,
+                          onSelected: (value) =>
+                              setState(() => _radiusFilter = value),
+                          icon: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Aucun prestataire dans un rayon de ${_radiusFilter.toInt()}km',
-                              style: TextStyle(color: Colors.grey.shade600),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primary.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.tune,
+                                  size: 16,
+                                  color: AppTheme.primary,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${_radiusFilter.toInt()}km',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.primary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: 5.0,
+                              child: Text('📍 5 km'),
+                            ),
+                            const PopupMenuItem(
+                              value: 10.0,
+                              child: Text('📍 10 km'),
+                            ),
+                            const PopupMenuItem(
+                              value: 20.0,
+                              child: Text('📍 20 km'),
+                            ),
+                            const PopupMenuItem(
+                              value: 50.0,
+                              child: Text('📍 50 km'),
                             ),
                           ],
                         ),
-                      );
-                    }
-
-                    return ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: nearbyProviders.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 16),
-                      itemBuilder: (context, index) {
-                        final provider = nearbyProviders[index];
-                        double? distance;
-                        if (_userPosition != null) {
-                          distance = LocationService.getProviderDistance(
-                            provider,
-                            _userPosition!.latitude,
-                            _userPosition!.longitude,
-                          );
-                        }
-                        return _buildNearbyProviderCard(provider, distance);
-                      },
-                    );
-                  },
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 24),
-            ],
+                const SizedBox(height: 12),
+                SizedBox(
+                  height:
+                      220, // Augmenté de 210 à 220 pour éviter les débordements (2.1px)
+                  child: Builder(
+                    builder: (context) {
+                      // Trier et filtrer les prestataires par distance
+                      List<User> nearbyProviders = filteredProviders;
 
-            // Filters Row
-            Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: AppTheme.surface),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.03),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _sortOption,
-                        isExpanded: true,
-                        icon: const Icon(Icons.keyboard_arrow_down_rounded),
-                        style: const TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                        ),
-                        onChanged: (value) =>
-                            setState(() => _sortOption = value!),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'rating_desc',
-                            child: Text('⭐ Mieux notés'),
+                      if (_userPosition != null) {
+                        // Filtrer par rayon
+                        nearbyProviders = LocationService.filterByRadius(
+                          nearbyProviders,
+                          _userPosition!.latitude,
+                          _userPosition!.longitude,
+                          _radiusFilter,
+                        );
+
+                        // Trier par distance
+                        nearbyProviders = LocationService.sortByDistance(
+                          nearbyProviders,
+                          _userPosition!.latitude,
+                          _userPosition!.longitude,
+                        );
+                      }
+
+                      // Limiter à 10 prestataires
+                      nearbyProviders = nearbyProviders.take(10).toList();
+
+                      if (nearbyProviders.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.location_off,
+                                size: 48,
+                                color: Colors.grey.shade400,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Aucun prestataire dans un rayon de ${_radiusFilter.toInt()}km',
+                                style: TextStyle(color: Colors.grey.shade600),
+                              ),
+                            ],
                           ),
-                          DropdownMenuItem(
-                            value: 'price_asc',
-                            child: Text('💰 Moins chers'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'price_desc',
-                            child: Text('💎 Haut de gamme'),
+                        );
+                      }
+
+                      return ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: nearbyProviders.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 16),
+                        itemBuilder: (context, index) {
+                          final provider = nearbyProviders[index];
+                          double? distance;
+                          if (_userPosition != null) {
+                            distance = LocationService.getProviderDistance(
+                              provider,
+                              _userPosition!.latitude,
+                              _userPosition!.longitude,
+                            );
+                          }
+                          return _buildNearbyProviderCard(provider, distance);
+                        },
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ],
+
+              // Filters Row
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: AppTheme.surface),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.03),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
                           ),
                         ],
                       ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _sortOption,
+                          isExpanded: true,
+                          icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                          style: const TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                          onChanged: (value) =>
+                              setState(() => _sortOption = value!),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'rating_desc',
+                              child: Text('⭐ Mieux notés'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'price_asc',
+                              child: Text('💰 Moins chers'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'price_desc',
+                              child: Text('💎 Haut de gamme'),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                ),
 
-                const SizedBox(width: 12),
+                  const SizedBox(width: 12),
 
-                // Favorites Toggle
-                Material(
-                  color: _showFavoritesOnly
-                      ? AppTheme.accent.withOpacity(0.1)
-                      : Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                  child: InkWell(
-                    onTap: () => setState(
-                      () => _showFavoritesOnly = !_showFavoritesOnly,
-                    ),
+                  // Favorites Toggle
+                  Material(
+                    color: _showFavoritesOnly
+                        ? AppTheme.accent.withOpacity(0.1)
+                        : Colors.white,
                     borderRadius: BorderRadius.circular(18),
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        border: Border.all(
+                    child: InkWell(
+                      onTap: () => setState(
+                        () => _showFavoritesOnly = !_showFavoritesOnly,
+                      ),
+                      borderRadius: BorderRadius.circular(18),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: _showFavoritesOnly
+                                ? AppTheme.accent
+                                : AppTheme.surface,
+                            width: 2,
+                          ),
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: Icon(
+                          _showFavoritesOnly
+                              ? Icons.favorite
+                              : Icons.favorite_border,
                           color: _showFavoritesOnly
                               ? AppTheme.accent
-                              : AppTheme.surface,
-                          width: 2,
+                              : AppTheme.textSecondary,
+                          size: 20,
                         ),
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: Icon(
-                        _showFavoritesOnly
-                            ? Icons.favorite
-                            : Icons.favorite_border,
-                        color: _showFavoritesOnly
-                            ? AppTheme.accent
-                            : AppTheme.textSecondary,
-                        size: 20,
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
 
-            const SizedBox(height: 24),
+              const SizedBox(height: 24),
 
-            // Providers Grid with FILTERED LIST
-            providerListProvider.isLoading
-                ? _buildLoadingGrid()
-                : filteredProviders.isEmpty
-                ? _buildEmptyState()
-                : _buildProvidersGrid(filteredProviders),
-          ],
+              // Providers Grid with FILTERED LIST
+              providerListProvider.isLoading
+                  ? _buildLoadingGrid()
+                  : filteredProviders.isEmpty
+                  ? _buildEmptyState()
+                  : _buildProvidersGrid(filteredProviders),
+            ],
+          ),
         ),
       ),
     );
@@ -988,31 +1045,37 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
     final isActive = _activeCategory == value;
     return Padding(
       padding: const EdgeInsets.only(right: 10),
-      child: Material(
-        color: isActive ? AppTheme.primary : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        elevation: isActive ? 4 : 0,
-        shadowColor: isActive
-            ? AppTheme.primary.withOpacity(0.3)
-            : Colors.transparent,
-        child: InkWell(
-          onTap: () => setState(() => _activeCategory = value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+        child: Material(
+          color: isActive ? AppTheme.primary : Colors.white,
           borderRadius: BorderRadius.circular(20),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: isActive ? AppTheme.primary : AppTheme.surface,
-                width: 2,
+          elevation: isActive ? 8 : 0,
+          shadowColor: isActive
+              ? AppTheme.primary.withOpacity(0.4)
+              : Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              setState(() => _activeCategory = value);
+            },
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: isActive ? AppTheme.primary : AppTheme.surface,
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(20),
               ),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                color: isActive ? Colors.white : AppTheme.textSecondary,
-                fontWeight: FontWeight.w700,
-                fontSize: 13,
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: isActive ? Colors.white : AppTheme.textSecondary,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                ),
               ),
             ),
           ),
@@ -1034,126 +1097,149 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
           ),
         );
       },
-      child: Container(
-        width: 140,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Container(
+      child:
+          Container(
+                width: 140,
                 decoration: BoxDecoration(
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(16),
-                  ),
-                  image: provider.profilePhotoUrl != null
-                      ? DecorationImage(
-                          image: NetworkImage(provider.profilePhotoUrl!),
-                          fit: BoxFit.cover,
-                        )
-                      : null,
-                  color: AppTheme.primary.withOpacity(0.1),
-                ),
-                child: provider.profilePhotoUrl == null
-                    ? Center(
-                        child: Text(
-                          provider.name.isNotEmpty ? provider.name[0] : '?',
-                          style: const TextStyle(
-                            fontSize: 30,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.primary,
-                          ),
-                        ),
-                      )
-                    : null,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    provider.displayName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
                     ),
-                  ),
-                  Text(
-                    provider.serviceName ?? 'Prestataire',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.grey, fontSize: 11),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(16),
+                          ),
+                          image: provider.profilePhotoUrl != null
+                              ? DecorationImage(
+                                  image: NetworkImage(
+                                    provider.profilePhotoUrl!,
+                                  ),
+                                  fit: BoxFit.cover,
+                                  onError: (exception, stackTrace) =>
+                                      print("Image load error: $exception"),
+                                )
+                              : null,
+                          color: AppTheme.primary.withOpacity(0.1),
+                        ),
+                        child: provider.profilePhotoUrl == null
+                            ? Center(
+                                child: Text(
+                                  provider.name.isNotEmpty
+                                      ? provider.name[0]
+                                      : '?',
+                                  style: const TextStyle(
+                                    fontSize: 30,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.primary,
+                                  ),
+                                ),
+                              )
+                            : null,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.star, size: 12, color: Colors.amber),
-                          const SizedBox(width: 2),
                           Text(
-                            provider.avgRating?.toStringAsFixed(1) ?? "Nouveau",
+                            provider.displayName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                          Text(
+                            provider.serviceName ?? 'Prestataire',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.grey,
                               fontSize: 11,
                             ),
                           ),
-                        ],
-                      ),
-                      // Afficher la distance si disponible
-                      if (distance != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppTheme.accent.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
+                          const SizedBox(height: 4),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Icon(
-                                Icons.location_on,
-                                size: 10,
-                                color: AppTheme.accent,
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.star,
+                                    size: 12,
+                                    color: Colors.amber,
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    provider.avgRating?.toStringAsFixed(1) ??
+                                        "Nouveau",
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 2),
-                              Text(
-                                LocationService.getFormattedDistance(distance),
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppTheme.accent,
+                              if (distance != null)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.accent.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.location_on,
+                                        size: 10,
+                                        color: AppTheme.accent,
+                                      ),
+                                      const SizedBox(width: 2),
+                                      Text(
+                                        LocationService.getFormattedDistance(
+                                          distance,
+                                        ),
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppTheme.accent,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
                             ],
                           ),
-                        ),
-                    ],
-                  ),
-                ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              )
+              .animate()
+              .fadeIn(duration: 200.ms)
+              .scale(
+                begin: const Offset(0.95, 0.95),
+                end: const Offset(1, 1),
+                curve: Curves.easeOutBack,
               ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -1163,14 +1249,18 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        childAspectRatio: 0.68,
+        childAspectRatio:
+            0.58, // Baissé de 0.62 à 0.58 pour plus de hauteur (résout l'overflow de 2.1px)
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
       ),
       itemCount: providers.length,
       itemBuilder: (context, index) {
         final provider = providers[index];
-        return _buildProviderCard(provider);
+        return _buildProviderCard(provider)
+            .animate(delay: (index * 50).ms)
+            .fadeIn(duration: 400.ms)
+            .slideY(begin: 0.1, end: 0);
       },
     );
   }
@@ -1205,12 +1295,14 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Image
+            // Image Section
             Expanded(
               flex: 3,
               child: Stack(
                 children: [
                   Container(
+                    width: double.infinity,
+                    height: double.infinity,
                     decoration: BoxDecoration(
                       color: AppTheme.surface,
                       borderRadius: const BorderRadius.only(
@@ -1218,20 +1310,41 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
                         topRight: Radius.circular(28),
                       ),
                     ),
-                    child: Center(
-                      child: CircleAvatar(
-                        radius: 35,
-                        backgroundColor: AppTheme.primary.withOpacity(0.2),
-                        child: Text(
-                          (provider.name ?? 'U')[0].toUpperCase(),
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w900,
-                            color: AppTheme.primary,
+                    child: provider.profilePhotoUrl != null
+                        ? ClipRRect(
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(28),
+                              topRight: Radius.circular(28),
+                            ),
+                            child: Image.network(
+                              provider.profilePhotoUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  Center(
+                                    child: Icon(
+                                      Icons.person,
+                                      size: 40,
+                                      color: AppTheme.primary.withOpacity(0.5),
+                                    ),
+                                  ),
+                            ),
+                          )
+                        : Center(
+                            child: CircleAvatar(
+                              radius: 35,
+                              backgroundColor: AppTheme.primary.withOpacity(
+                                0.2,
+                              ),
+                              child: Text(
+                                (provider.name ?? 'U')[0].toUpperCase(),
+                                style: const TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w900,
+                                  color: AppTheme.primary,
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
                   ),
 
                   // Favorite Button
@@ -1250,7 +1363,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
                           ),
                         ],
                       ),
-                      child: Icon(
+                      child: const Icon(
                         Icons.favorite_border,
                         color: AppTheme.textSecondary,
                         size: 16,
@@ -1280,7 +1393,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.verified,
                             color: AppTheme.primary,
                             size: 12,
@@ -1303,7 +1416,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
               ),
             ),
 
-            // Info
+            // Info Section
             Expanded(
               flex: 2,
               child: Padding(
@@ -1328,7 +1441,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.location_on,
                               size: 12,
                               color: AppTheme.primary,
@@ -1337,7 +1450,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
                             Expanded(
                               child: Text(
                                 provider.location ?? 'Non spécifié',
-                                style: TextStyle(
+                                style: const TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,
                                   color: AppTheme.textSecondary,
@@ -1348,6 +1461,49 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
                             ),
                           ],
                         ),
+                        if (_userPosition != null)
+                          Builder(
+                            builder: (context) {
+                              final dist = LocationService.getProviderDistance(
+                                provider,
+                                _userPosition!.latitude,
+                                _userPosition!.longitude,
+                              );
+                              if (dist == null) return const SizedBox.shrink();
+                              return Container(
+                                margin: const EdgeInsets.only(top: 4),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.accent.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.location_on,
+                                      size: 10,
+                                      color: AppTheme.accent,
+                                    ),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      LocationService.getFormattedDistance(
+                                        dist,
+                                      ),
+                                      style: const TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppTheme.accent,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
                       ],
                     ),
 
@@ -1398,30 +1554,101 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
               ),
             ),
           ],
-        ), // Column
-      ), // Container
-    ); // GestureDetector
+        ),
+      ),
+    );
   }
 
   Widget _buildLoadingGrid() {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 0.75,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
+    return Shimmer.fromColors(
+      baseColor: Colors.grey[200]!,
+      highlightColor: Colors.white,
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          childAspectRatio: 0.58,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+        ),
+        itemCount: 6,
+        itemBuilder: (context, index) {
+          return Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: AppTheme.surface),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(28),
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          height: 12,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          height: 10,
+                          width: 80,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Container(
+                              height: 16,
+                              width: 40,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                            Container(
+                              height: 24,
+                              width: 24,
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
-      itemCount: 6,
-      itemBuilder: (context, index) {
-        return Container(
-          decoration: BoxDecoration(
-            color: AppTheme.surface,
-            borderRadius: BorderRadius.circular(28),
-          ),
-        );
-      },
     );
   }
 
@@ -1431,14 +1658,40 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
         children: [
           const SizedBox(height: 60),
           Container(
-            width: 100,
-            height: 100,
+            width: 120,
+            height: 120,
             decoration: BoxDecoration(
-              color: AppTheme.surface,
+              color: AppTheme.primary.withOpacity(0.05),
               shape: BoxShape.circle,
             ),
-            child: const Center(
-              child: Text('🔎', style: TextStyle(fontSize: 40)),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Icon(
+                  Icons.search_off_rounded,
+                  size: 60,
+                  color: AppTheme.primary.withOpacity(0.2),
+                ),
+                Text('🔎', style: TextStyle(fontSize: 40))
+                    .animate(onPlay: (controller) => controller.repeat())
+                    .shimmer(
+                      duration: 2.seconds,
+                      color: Colors.white.withOpacity(0.5),
+                    )
+                    .moveY(
+                      begin: -5,
+                      end: 5,
+                      curve: Curves.easeInOut,
+                      duration: 1.5.seconds,
+                    )
+                    .then()
+                    .moveY(
+                      begin: 5,
+                      end: -5,
+                      curve: Curves.easeInOut,
+                      duration: 1.5.seconds,
+                    ),
+              ],
             ),
           ),
           const SizedBox(height: 24),
@@ -1449,16 +1702,41 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
               fontWeight: FontWeight.w900,
               color: AppTheme.textPrimary,
             ),
-          ),
+          ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.1, end: 0),
           const SizedBox(height: 8),
           Text(
-            'Réessayez avec d\'autres filtres',
+            'Réessayez avec d\'autres filtres ou catégories',
+            textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
               color: AppTheme.textSecondary,
             ),
-          ),
+          ).animate().fadeIn(delay: 400.ms),
+          const SizedBox(height: 32),
+          if (_activeCategory != 'all' ||
+              _searchQuery.isNotEmpty ||
+              _showFavoritesOnly)
+            TextButton.icon(
+              onPressed: () {
+                setState(() {
+                  _activeCategory = 'all';
+                  _searchQuery = '';
+                  _searchController.clear();
+                  _showFavoritesOnly = false;
+                });
+              },
+              icon: Icon(Icons.refresh_rounded),
+              label: Text("Réinitialiser les filtres"),
+              style: TextButton.styleFrom(
+                foregroundColor: AppTheme.primary,
+                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  side: BorderSide(color: AppTheme.primary.withOpacity(0.2)),
+                ),
+              ),
+            ).animate().fadeIn(delay: 600.ms),
         ],
       ),
     );

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../theme/app_theme.dart';
 import '../models/message_model.dart';
 import '../repositories/chat_repository.dart';
@@ -339,31 +340,38 @@ class _ChatScreenState extends State<ChatScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: AppTheme.primary.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.chat_bubble_outline,
-              size: 48,
-              color: AppTheme.primary.withOpacity(0.5),
-            ),
-          ),
-          const SizedBox(height: 16),
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withOpacity(0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.chat_bubble_rounded,
+                  size: 56,
+                  color: AppTheme.primary.withOpacity(0.3),
+                ),
+              )
+              .animate(onPlay: (c) => c.repeat(reverse: true))
+              .scale(
+                begin: const Offset(0.9, 0.9),
+                end: const Offset(1.1, 1.1),
+                duration: 2.seconds,
+                curve: Curves.easeInOut,
+              ),
+          const SizedBox(height: 24),
           Text(
-            "Aucun message",
+            "Aucun message pour l'instant",
             style: TextStyle(
-              color: Colors.grey.shade600,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimary,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
             ),
-          ),
-          const SizedBox(height: 4),
+          ).animate().fadeIn(duration: 400.ms),
+          const SizedBox(height: 8),
           Text(
-            "Envoyez le premier message à ${widget.otherUserName}",
-            style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-          ),
+            "Entamez la conversation avec ${widget.otherUserName}",
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+          ).animate().fadeIn(delay: 200.ms),
         ],
       ),
     );
@@ -390,74 +398,79 @@ class _ChatScreenState extends State<ChatScreen> {
     bool isLast,
   ) {
     return Align(
-      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: EdgeInsets.only(
-          bottom: isLast ? 12 : 2,
-          left: isMe ? 50 : 0,
-          right: isMe ? 0 : 50,
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: isMe ? AppTheme.primary : Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(
-              isMe || !isFirst ? 18 : 18,
-            ), // Toujours rond sauf si...
-            topRight: Radius.circular(isMe && isFirst ? 18 : 18),
-            bottomLeft: Radius.circular(isMe ? 18 : (isLast ? 4 : 18)),
-            bottomRight: Radius.circular(isMe ? (isLast ? 4 : 18) : 18),
-          ),
-          boxShadow: [
-            if (isLast)
-              BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              msg.content,
-              style: TextStyle(
-                color: isMe ? Colors.white : const Color(0xFF333333),
-                fontSize: 15,
-                height: 1.3,
-              ),
+          alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+          child: Container(
+            margin: EdgeInsets.only(
+              bottom: isLast ? 12 : 2,
+              left: isMe ? 50 : 0,
+              right: isMe ? 0 : 50,
             ),
-            if (isLast) ...[
-              const SizedBox(height: 4),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Text(
-                    _formatTime(msg.createdAt),
-                    style: TextStyle(
-                      color: isMe
-                          ? Colors.white.withOpacity(0.7)
-                          : Colors.grey.shade400,
-                      fontSize: 10,
-                    ),
-                  ),
-                  if (isMe) ...[
-                    const SizedBox(width: 4),
-                    Icon(
-                      Icons.done_all,
-                      size: 12,
-                      color: Colors.white.withOpacity(0.7),
-                    ), // Lu
-                  ],
-                ],
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: isMe ? AppTheme.primary : Colors.white,
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(18),
+                topRight: const Radius.circular(18),
+                bottomLeft: Radius.circular(isMe ? 18 : (isLast ? 4 : 18)),
+                bottomRight: Radius.circular(isMe ? (isLast ? 4 : 18) : 18),
               ),
-            ],
-          ],
-        ),
-      ),
-    );
+              boxShadow: [
+                if (isLast)
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  msg.content,
+                  style: TextStyle(
+                    color: isMe ? Colors.white : const Color(0xFF333333),
+                    fontSize: 15,
+                    height: 1.3,
+                  ),
+                ),
+                if (isLast) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Text(
+                        _formatTime(msg.createdAt),
+                        style: TextStyle(
+                          color: isMe
+                              ? Colors.white.withOpacity(0.7)
+                              : Colors.grey.shade400,
+                          fontSize: 10,
+                        ),
+                      ),
+                      if (isMe) ...[
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.done_all,
+                          size: 12,
+                          color: Colors.white.withOpacity(0.7),
+                        ), // Lu
+                      ],
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        )
+        .animate()
+        .fadeIn(duration: 200.ms)
+        .scale(
+          begin: const Offset(0.95, 0.95),
+          end: const Offset(1, 1),
+          curve: Curves.easeOutBack,
+        );
   }
 
   Widget _buildInputArea() {
@@ -555,23 +568,53 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           const SizedBox(width: 8),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
-            child: Text(
-              "En train d'écrire...",
-              style: TextStyle(
-                color: Colors.grey.shade500,
-                fontSize: 12,
-                fontStyle: FontStyle.italic,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "En train d'écrire",
+                  style: TextStyle(
+                    color: Colors.grey.shade500,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Row(
+                  children: List.generate(3, (index) {
+                    return Container(
+                          width: 3,
+                          height: 3,
+                          margin: const EdgeInsets.symmetric(horizontal: 1),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade400,
+                            shape: BoxShape.circle,
+                          ),
+                        )
+                        .animate(onPlay: (c) => c.repeat())
+                        .fadeIn(delay: (index * 200).ms, duration: 400.ms)
+                        .then()
+                        .fadeOut(duration: 400.ms);
+                  }),
+                ),
+              ],
             ),
           ),
         ],
       ),
-    );
+    ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.1, end: 0);
   }
 
   String _formatTime(DateTime date) {

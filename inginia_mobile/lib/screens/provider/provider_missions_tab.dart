@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/websocket_service.dart';
 import '../../widgets/shimmer_loading.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 class ProviderMissionsTab extends StatefulWidget {
   const ProviderMissionsTab({super.key});
@@ -299,44 +300,66 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
   }) {
     if (list.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.inventory_2_outlined,
-                size: 50,
-                color: Colors.grey.shade400,
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              "Aucune mission ici",
-              style: TextStyle(
-                color: AppTheme.textLight,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 100),
-          ],
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withOpacity(0.05),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.assignment_turned_in_rounded,
+                      size: 64,
+                      color: AppTheme.primary.withOpacity(0.2),
+                    ),
+                  )
+                  .animate(onPlay: (c) => c.repeat(reverse: true))
+                  .scale(
+                    begin: const Offset(0.9, 0.9),
+                    end: const Offset(1.1, 1.1),
+                    duration: 2.seconds,
+                    curve: Curves.easeInOut,
+                  ),
+              const SizedBox(height: 24),
+              const Text(
+                "Aucune mission ici",
+                style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                ),
+              ).animate().fadeIn(duration: 400.ms),
+              const SizedBox(height: 8),
+              Text(
+                "Vos prochaines missions apparaîtront ici.",
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+              ).animate().fadeIn(delay: 200.ms),
+              const SizedBox(height: 100),
+            ],
+          ),
         ),
       );
     }
 
-    return ListView.separated(
-      padding: const EdgeInsets.all(20),
-      itemCount: list.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 20),
-      itemBuilder: (context, index) {
-        final r = list[index];
-        return _buildCard(r, isPending: isPending, isActive: isActive);
-      },
+    return RefreshIndicator(
+      onRefresh: _fetchMissions,
+      color: AppTheme.primary,
+      child: ListView.separated(
+        padding: const EdgeInsets.all(20),
+        itemCount: list.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 20),
+        itemBuilder: (context, index) {
+          final r = list[index];
+          return _buildCard(r, isPending: isPending, isActive: isActive)
+              .animate(delay: (index * 50).ms)
+              .fadeIn(duration: 400.ms)
+              .slideY(begin: 0.1, end: 0);
+        },
+      ),
     );
   }
 
@@ -352,9 +375,9 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
           ),
         ],
       ),

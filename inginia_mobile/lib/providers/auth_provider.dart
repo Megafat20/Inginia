@@ -140,6 +140,7 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
     try {
       await _authRepository.updateProfile(
+        email: _user?.email, // Indispensable pour la validation backend
         latitude: latitude,
         longitude: longitude,
       );

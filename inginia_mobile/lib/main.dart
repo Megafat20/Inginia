@@ -11,8 +11,9 @@ import 'screens/client_dashboard_screen.dart';
 import 'screens/provider/provider_dashboard_screen.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
 import 'services/push_notification_service.dart';
-
 import 'services/websocket_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'screens/onboarding_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,11 +30,15 @@ void main() async {
   // Initialize WebSocket Service for Realtime
   await WebSocketService().init();
 
-  runApp(MyApp());
+  final prefs = await SharedPreferences.getInstance();
+  final hasSeenOnboarding = prefs.getBool('has_seen_onboarding') ?? false;
+
+  runApp(MyApp(hasSeenOnboarding: hasSeenOnboarding));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final bool hasSeenOnboarding;
+  const MyApp({super.key, required this.hasSeenOnboarding});
 
   static final GlobalKey<NavigatorState> navigatorKey =
       GlobalKey<NavigatorState>();
@@ -52,14 +57,15 @@ class MyApp extends StatelessWidget {
         navigatorKey: navigatorKey, // <--- Ajout de la clé de navigation
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme, // <--- Application du Design System
-        home: const AuthWrapper(),
+        home: AuthWrapper(hasSeenOnboarding: hasSeenOnboarding),
       ),
     );
   }
 }
 
 class AuthWrapper extends StatelessWidget {
-  const AuthWrapper({super.key});
+  final bool hasSeenOnboarding;
+  const AuthWrapper({super.key, required this.hasSeenOnboarding});
 
   @override
   Widget build(BuildContext context) {
@@ -67,6 +73,10 @@ class AuthWrapper extends StatelessWidget {
 
     if (authProvider.isLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    if (!hasSeenOnboarding) {
+      return const OnboardingScreen();
     }
 
     if (!authProvider.isAuthenticated) {

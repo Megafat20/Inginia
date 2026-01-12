@@ -1,3 +1,5 @@
+import '../services/api_service.dart';
+
 class User {
   final int id;
   final String name;
@@ -12,6 +14,8 @@ class User {
   final String? profilePhotoUrl;
   final double? avgRating;
   final bool isAgency;
+  final List<int> professionIds;
+  final List<String> professionNames;
   final double? latitude;
   final double? longitude;
 
@@ -29,6 +33,8 @@ class User {
     this.profilePhotoUrl,
     this.avgRating,
     this.isAgency = false,
+    this.professionIds = const <int>[],
+    this.professionNames = const <String>[],
     this.latitude,
     this.longitude,
   });
@@ -42,10 +48,12 @@ class User {
 
   factory User.fromJson(Map<String, dynamic> json) {
     // Determine photo URL
-    String? photo = json['profile_photo'] ?? json['photo'];
-    if (photo != null && !photo.startsWith('http')) {
+    String? photo =
+        json['profile_photo']?.toString() ?? json['photo']?.toString();
+    if (photo != null && photo.isNotEmpty && !photo.startsWith('http')) {
       // Build full URL if it's just a filename
-      // This is a bit hacky, maybe the backend should always provide it
+      final baseUrl = ApiService.baseUrl.replaceAll('/api', '');
+      photo = Uri.encodeFull('$baseUrl/storage/profile_photos/$photo');
     }
 
     return User(
@@ -71,6 +79,16 @@ class User {
           json['is_agency'] == 1 ||
           json['is_agency'] == true ||
           json['is_agency'] == '1',
+      professionIds:
+          (json['professions'] as List?)
+              ?.map((p) => int.tryParse(p['id']?.toString() ?? '') ?? 0)
+              .toList() ??
+          <int>[],
+      professionNames:
+          (json['professions'] as List?)
+              ?.map((p) => p['name']?.toString() ?? '')
+              .toList() ??
+          <String>[],
       latitude: json['latitude'] != null
           ? double.tryParse(json['latitude'].toString())
           : null,

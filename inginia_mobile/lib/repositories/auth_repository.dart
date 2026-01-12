@@ -140,8 +140,13 @@ class AuthRepository {
   }) async {
     try {
       final Map<String, dynamic> map = {};
+
+      // L'API Laravel Inginia requiert l'email pour la validation même en mise à jour partielle
+      if (email != null) {
+        map['email'] = email;
+      }
+
       if (name != null) map['name'] = name;
-      if (email != null) map['email'] = email;
       if (phone != null) map['phone'] = phone;
       if (slogan != null) map['slogan'] = slogan;
       if (adresse != null) map['adresse'] = adresse;
