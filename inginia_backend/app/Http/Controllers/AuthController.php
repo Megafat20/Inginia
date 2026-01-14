@@ -50,6 +50,28 @@ class AuthController extends Controller
             $user->professions()->sync($request->profession_ids);
         }
 
+        // Gérer les professions personnalisées (bouton Autre)
+        if ($request->has('custom_professions')) {
+            $customIds = [];
+            foreach ($request->custom_professions as $profName) {
+                // Nettoyer le nom (trim, title case)
+                $cleanName = Str::title(trim($profName));
+                
+                // Trouver ou créer la profession
+                $profession = \App\Models\Profession::firstOrCreate(
+                    ['name' => $cleanName],
+                    ['description' => 'Ajouté par utilisateur'] // Optionnel
+                );
+                
+                $customIds[] = $profession->id;
+            }
+            
+            // Attacher sans détacher les précédents
+            if (!empty($customIds)) {
+                $user->professions()->attach($customIds);
+            }
+        }
+
         // Création du token
         $token = $user->createToken('LaravelPassportToken')->accessToken;
 
@@ -69,6 +91,9 @@ class AuthController extends Controller
                 'profile_photo' => $user->photo
                     ? asset('storage/profile_photos/'.$user->photo)
                     : null,
+                'is_validated' => (bool) $user->is_validated,
+                'is_agency' => (bool) $user->is_agency,
+                'is_available' => (bool) $user->is_available,
                 'professions' => $user->professions->map(fn ($p) => [
                     'id' => $p->id,
                     'name' => $p->name,
@@ -88,13 +113,7 @@ class AuthController extends Controller
         
         $user = Auth::user();
         
-        // Check if provider is validated
-        if ($user->role === 'prestataire' && !$user->is_validated) {
-            Auth::logout();
-            return response()->json([
-                'error' => 'Votre compte prestataire est en attente de validation par un administrateur.'
-            ], 403);
-        }
+        // Removed 403 block for unvalidated providers to allow "offline mode" access
         
         $token = $user->createToken('LaravelPassportToken')->accessToken;
 
@@ -143,15 +162,35 @@ class AuthController extends Controller
     {
         $request->user()->token()->revoke();
 
-        return response()->json(['message' => 'Décon    nexion réussie']);
+        return response()->json(['message' => 'Déconnexion réussie']);
     }
 
     // 🔹 Utilisateur connecté
     // UserController.php
     public function me(Request $request)
     {
-        $user = $request->user()->load(['professions', 'competances']);
+        try {
+            $user = $request->user()->load(['professions', 'competances']);
+            return response()->json($user);
+        } catch (\Exception $e) {
+            \Log::error("Error in AuthController@me: " . $e->getMessage());
+            return response()->json(['error' => 'Internal Server Error'], 500);
+        }
+    }
 
-        return response()->json($user);
+    public function updateAvailability(Request $request)
+    {
+        $request->validate([
+            'is_available' => 'required|boolean',
+        ]);
+
+        $user = auth()->user();
+        $user->is_available = $request->is_available;
+        $user->save();
+
+        return response()->json([
+            'message' => 'Disponibilité mise à jour',
+            'is_available' => $user->is_available
+        ]);
     }
 }

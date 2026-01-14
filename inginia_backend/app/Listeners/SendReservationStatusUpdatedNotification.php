@@ -48,7 +48,7 @@ class SendReservationStatusUpdatedNotification
         };
 
         try {
-            $this->fcm->sendNotification(
+            $this->fcm->sendToMultipleTokens(
                 $tokens,
                 "Suivi de mission 📋",
                 $body,

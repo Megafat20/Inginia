@@ -56,7 +56,10 @@ Route::middleware('auth:api')->group(function () {
 
     Route::get('/avis/{prestataire_id}', [AvisController::class, 'show']);
     Route::post('/avis/{prestataire_id}', [AvisController::class, 'store']);
+    Route::post('/avis/{avis_id}/respond', [AvisController::class, 'respond']);
+    Route::post('/avis/{avis_id}/helpful', [AvisController::class, 'markHelpful']);
     Route::get('/me', [AuthController::class, 'me']);
+    Route::put('/me/availability', [AuthController::class, 'updateAvailability']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/users/fcm-token', [UserController::class, 'updateFcmToken']);
 
@@ -120,6 +123,8 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/providers/{id}/validate', [\App\Http\Controllers\AdminController::class, 'validateProvider']);
         Route::delete('/providers/{id}/reject', [\App\Http\Controllers\AdminController::class, 'rejectProvider']);
         Route::get('/users', [\App\Http\Controllers\AdminController::class, 'getAllUsers']);
+        Route::put('/users/{id}', [\App\Http\Controllers\AdminController::class, 'updateUser']);
+        Route::delete('/users/{id}', [\App\Http\Controllers\AdminController::class, 'deleteUser']);
     });
 });     // Profil prestataire
 Route::get('/professions/populaires', [ProviderController::class, 'popularProfessions']);

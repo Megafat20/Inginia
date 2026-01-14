@@ -11,7 +11,8 @@ import '../providers/auth_provider.dart';
 import '../services/websocket_service.dart';
 
 class MissionScreen extends StatefulWidget {
-  const MissionScreen({super.key});
+  final int? initialReservationId;
+  const MissionScreen({super.key, this.initialReservationId});
 
   @override
   State<MissionScreen> createState() => _MissionScreenState();

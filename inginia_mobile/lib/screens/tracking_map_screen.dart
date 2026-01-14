@@ -28,7 +28,10 @@ class _TrackingMapScreenState extends State<TrackingMapScreen> {
   LatLng? _providerPos;
   LatLng? _clientPos;
   List<LatLng> _routePoints = [];
+  double? _distance;
+  int? _durationMinutes;
   bool _isLoadingRoute = true;
+  bool _isNear = false;
 
   @override
   void initState() {
@@ -51,12 +54,19 @@ class _TrackingMapScreenState extends State<TrackingMapScreen> {
       WebSocketService().listenToReservationUpdates(widget.reservation.id, (
         data,
       ) {
-        if (data['latitude'] != null && data['longitude'] != null) {
+        final event = data['_event'];
+        if (event == 'provider.moved' ||
+            (data['latitude'] != null && data['longitude'] != null)) {
           if (!mounted) return;
           setState(() {
-            _providerPos = LatLng(data['latitude'], data['longitude']);
+            _providerPos = LatLng(
+              (data['latitude'] as num).toDouble(),
+              (data['longitude'] as num).toDouble(),
+            );
           });
           _updateRoute();
+          // Don't auto-fit every time if the user is manually zooming,
+          // but fit if it's the first move or significantly different
           _fitMap();
         }
       });
@@ -88,16 +98,52 @@ class _TrackingMapScreenState extends State<TrackingMapScreen> {
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final List coords = data['routes'][0]['geometry']['coordinates'];
-        setState(() {
-          _routePoints = coords.map((c) => LatLng(c[1], c[0])).toList();
-          _isLoadingRoute = false;
-        });
+        if (data['routes'] != null && data['routes'].isNotEmpty) {
+          final route = data['routes'][0];
+          final List coords = route['geometry']['coordinates'];
+
+          setState(() {
+            _routePoints = coords.map((c) => LatLng(c[1], c[0])).toList();
+            _distance = (route['distance'] as num).toDouble() / 1000.0; // km
+            _durationMinutes = ((route['duration'] as num).toDouble() / 60.0)
+                .round(); // min
+            _isLoadingRoute = false;
+
+            // Check proximity (less than 500m)
+            if (_distance != null && _distance! < 0.5 && !_isNear) {
+              _isNear = true;
+              _showProximityAlert();
+            }
+          });
+        }
       }
     } catch (e) {
       print("Error fetching route: $e");
       setState(() => _isLoadingRoute = false);
     }
+  }
+
+  void _showProximityAlert() {
+    if (widget.isProvider) return; // Only for client
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.flash_on, color: Colors.white),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                "${widget.reservation.providerName} est à proximité !",
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.orange,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
   }
 
   void _updateRoute() {
@@ -286,15 +332,44 @@ class _TrackingMapScreenState extends State<TrackingMapScreen> {
                                     color: AppTheme.textPrimary,
                                   ),
                                 ),
-                                Text(
-                                  widget.isProvider
-                                      ? "Destination d'intervention"
-                                      : "En route vers vous",
-                                  style: TextStyle(
-                                    color: AppTheme.textSecondary,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                                Row(
+                                  children: [
+                                    if (_durationMinutes != null) ...[
+                                      Icon(
+                                        Icons.timer_outlined,
+                                        size: 14,
+                                        color: AppTheme.primary,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        "$_durationMinutes min",
+                                        style: const TextStyle(
+                                          color: AppTheme.primary,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                    ],
+                                    if (_distance != null) ...[
+                                      Icon(
+                                        Icons.route_outlined,
+                                        size: 14,
+                                        color: AppTheme.textSecondary,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _distance! < 1
+                                            ? "${(_distance! * 1000).round()} m"
+                                            : "${_distance!.toStringAsFixed(1)} km",
+                                        style: TextStyle(
+                                          color: AppTheme.textSecondary,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ],
                             ),

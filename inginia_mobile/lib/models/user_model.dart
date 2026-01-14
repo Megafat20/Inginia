@@ -18,6 +18,8 @@ class User {
   final List<String> professionNames;
   final double? latitude;
   final double? longitude;
+  final bool isValidated;
+  final bool isAvailable;
 
   User({
     required this.id,
@@ -37,7 +39,33 @@ class User {
     this.professionNames = const <String>[],
     this.latitude,
     this.longitude,
+    this.isValidated = true,
+    this.isAvailable = true,
   });
+
+  User copyWith({bool? isAvailable, String? name, String? photo}) {
+    return User(
+      id: id,
+      name: name ?? this.name,
+      email: email,
+      phone: phone,
+      role: role,
+      serviceName: serviceName,
+      location: location,
+      minPrice: minPrice,
+      slogan: slogan,
+      adresse: adresse,
+      profilePhotoUrl: photo ?? profilePhotoUrl,
+      avgRating: avgRating,
+      isAgency: isAgency,
+      professionIds: professionIds,
+      professionNames: professionNames,
+      latitude: latitude,
+      longitude: longitude,
+      isValidated: isValidated,
+      isAvailable: isAvailable ?? this.isAvailable,
+    );
+  }
 
   String get displayName {
     if (isAgency && serviceName != null && serviceName!.isNotEmpty) {
@@ -95,6 +123,14 @@ class User {
       longitude: json['longitude'] != null
           ? double.tryParse(json['longitude'].toString())
           : null,
+      isValidated:
+          json['is_validated'] == 1 ||
+          json['is_validated'] == true ||
+          json['is_validated'] == '1',
+      isAvailable:
+          json['is_available'] == 1 ||
+          json['is_available'] == true ||
+          json['is_available'] == '1',
     );
   }
 }

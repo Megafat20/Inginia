@@ -1,4 +1,5 @@
 import '../services/api_service.dart';
+import '../models/user_model.dart';
 
 class AdminService {
   final ApiService _apiService = ApiService();
@@ -48,12 +49,30 @@ class AdminService {
     }
   }
 
-  Future<List<dynamic>> getAllUsers() async {
+  Future<List<User>> getAllUsers() async {
     try {
       final response = await _apiService.client.get('/admin/users');
-      return response.data as List<dynamic>;
+      return (response.data as List)
+          .map((json) => User.fromJson(json))
+          .toList();
     } catch (e) {
       throw Exception('Erreur chargement utilisateurs: $e');
+    }
+  }
+
+  Future<void> updateUser(int userId, Map<String, dynamic> data) async {
+    try {
+      await _apiService.client.put('/admin/users/$userId', data: data);
+    } catch (e) {
+      throw Exception('Erreur modification utilisateur: $e');
+    }
+  }
+
+  Future<void> deleteUser(int userId) async {
+    try {
+      await _apiService.client.delete('/admin/users/$userId');
+    } catch (e) {
+      throw Exception('Erreur suppression utilisateur: $e');
     }
   }
 }

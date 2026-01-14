@@ -42,7 +42,7 @@ class SendMessageNotification
         if (empty($tokens)) return;
 
         try {
-            $this->fcm->sendNotification(
+            $this->fcm->sendToMultipleTokens(
                 $tokens,
                 "Message de " . ($sender->name ?? "Utilisateur"),
                 $message->message,

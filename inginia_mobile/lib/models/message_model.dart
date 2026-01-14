@@ -3,6 +3,7 @@ class Message {
   final int senderId;
   final int reservationId;
   final String content;
+  final String? imageUrl;
   final DateTime createdAt;
   final String? senderName;
 
@@ -11,6 +12,7 @@ class Message {
     required this.senderId,
     required this.reservationId,
     required this.content,
+    this.imageUrl,
     required this.createdAt,
     this.senderName,
   });
@@ -25,6 +27,7 @@ class Message {
           ? json['reservation_id']
           : int.parse(json['reservation_id'].toString()),
       content: json['message'] ?? '',
+      imageUrl: json['image_url'],
       createdAt: json['created_at'] != null
           ? (DateTime.tryParse(json['created_at']) ?? DateTime.now())
           : DateTime.now(),

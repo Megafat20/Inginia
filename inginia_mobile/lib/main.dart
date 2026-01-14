@@ -14,6 +14,8 @@ import 'services/push_notification_service.dart';
 import 'services/websocket_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/onboarding_screen.dart';
+import 'screens/pending_validation_screen.dart';
+import 'providers/theme_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,16 +50,21 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()..checkAuth()),
-        ChangeNotifierProvider(
-          create: (_) => ProviderListProvider(),
-        ), // <--- Ajout du Provider
+        ChangeNotifierProvider(create: (_) => ProviderListProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
-      child: MaterialApp(
-        title: 'Inginia Mobile',
-        navigatorKey: navigatorKey, // <--- Ajout de la clé de navigation
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.lightTheme, // <--- Application du Design System
-        home: AuthWrapper(hasSeenOnboarding: hasSeenOnboarding),
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, child) {
+          return MaterialApp(
+            title: 'Inginia Mobile',
+            navigatorKey: MyApp.navigatorKey,
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: themeProvider.themeMode,
+            home: AuthWrapper(hasSeenOnboarding: hasSeenOnboarding),
+          );
+        },
       ),
     );
   }
@@ -79,12 +86,21 @@ class AuthWrapper extends StatelessWidget {
       return const OnboardingScreen();
     }
 
+    // User not authenticated
     if (!authProvider.isAuthenticated) {
-      return const LoginScreen();
+      if (authProvider.shouldShowLogin) {
+        return const LoginScreen();
+      }
+      return const ClientDashboardScreen();
     }
 
     // User is authenticated - show dashboard based on role
     final user = authProvider.user;
+
+    // Mode Hors-ligne / Consultation
+    if (authProvider.isOfflineMode) {
+      return const ClientDashboardScreen();
+    }
 
     // Admin Dashboard
     if (user?.role == 'admin') {
@@ -93,6 +109,9 @@ class AuthWrapper extends StatelessWidget {
 
     // Provider Dashboard
     if (user?.role == 'prestataire' || user?.role == 'provider') {
+      if (!user!.isValidated) {
+        return const PendingValidationScreen();
+      }
       return const ProviderDashboardScreen();
     }
 

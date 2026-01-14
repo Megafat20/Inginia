@@ -36,7 +36,7 @@ class SendReservationCreatedNotification
         if (empty($tokens)) return;
 
         try {
-            $this->fcm->sendNotification(
+            $this->fcm->sendToMultipleTokens(
                 $tokens,
                 "Nouvelle demande ! 🛠️",
                 "{$client->name} a besoin de vos services.",

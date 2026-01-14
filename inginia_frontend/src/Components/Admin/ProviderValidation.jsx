@@ -333,6 +333,60 @@ const ProviderValidation = () => {
                 </div>
               )}
 
+              {selectedProvider.adresse && (
+                <div>
+                  <label className="text-sm font-bold text-slate-500 uppercase">
+                    Adresse
+                  </label>
+                  <p className="text-lg font-medium">
+                    {selectedProvider.adresse}
+                  </p>
+                </div>
+              )}
+
+              {selectedProvider.location && (
+                <div>
+                  <label className="text-sm font-bold text-slate-500 uppercase">
+                    Ville / Localisation
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <p className="text-lg font-medium">
+                      {selectedProvider.location}
+                    </p>
+                    {selectedProvider.latitude &&
+                      selectedProvider.longitude && (
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${selectedProvider.latitude},${selectedProvider.longitude}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline text-sm flex items-center gap-1"
+                        >
+                          <FaMapMarkerAlt /> Voir sur la carte
+                        </a>
+                      )}
+                  </div>
+                </div>
+              )}
+
+              {selectedProvider.professions &&
+                selectedProvider.professions.length > 0 && (
+                  <div>
+                    <label className="text-sm font-bold text-slate-500 uppercase mb-2 block">
+                      Professions
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedProvider.professions.map((prof) => (
+                        <span
+                          key={prof.id}
+                          className="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg font-medium"
+                        >
+                          {prof.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
               {selectedProvider.min_price && (
                 <div>
                   <label className="text-sm font-bold text-slate-500 uppercase">

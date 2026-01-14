@@ -26,6 +26,12 @@ class AppTheme {
   static const Color textPrimary = Color(0xFF1E293B); // Slate 800
   static const Color textSecondary = Color(0xFF64748B); // Slate 500
 
+  // 🌙 Dark Mode Colors
+  static const Color bgDark = Color(0xFF0F172A); // Slate 900
+  static const Color surfaceDark = Color(0xFF1E293B); // Slate 800
+  static const Color textDarkPrimary = Color(0xFFF8FAFC); // Slate 50
+  static const Color textDarkSecondary = Color(0xFF94A3B8); // Slate 400
+
   // 🖌️ Définition du Thème Global
   static ThemeData get lightTheme {
     return ThemeData(
@@ -79,10 +85,15 @@ class AppTheme {
         margin: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
       ), */
 
+      // 🎨 Thème des icônes
+      iconTheme: const IconThemeData(color: textDark, size: 24),
+
       // ⌨️ Champs de saisie (Input)
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: const Color(0xFFF1F5F9), // Slate 100
+        prefixIconColor: textLight,
+        suffixIconColor: textLight,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide.none,
@@ -107,6 +118,62 @@ class AppTheme {
         foregroundColor: textDark,
         elevation: 0,
         centerTitle: true,
+      ),
+    );
+  }
+
+  // 🌙 Thème Sombre Global
+  static ThemeData get darkTheme {
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: primary,
+        brightness: Brightness.dark,
+        secondary: secondary,
+        surface: surfaceDark,
+        background: bgDark,
+        error: const Color(0xFFEF4444),
+      ),
+      textTheme: GoogleFonts.interTextTheme().copyWith(
+        displayLarge: GoogleFonts.outfit(
+          fontSize: 32,
+          fontWeight: FontWeight.bold,
+          color: textDarkPrimary,
+        ),
+        displayMedium: GoogleFonts.outfit(
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+          color: textDarkPrimary,
+        ),
+        bodyLarge: GoogleFonts.inter(fontSize: 16, color: textDarkPrimary),
+        bodyMedium: GoogleFonts.inter(fontSize: 14, color: textDarkSecondary),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primary,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+        ),
+      ),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: bgDark,
+        foregroundColor: textDarkPrimary,
+        elevation: 0,
+        centerTitle: true,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: const Color(0xFF1E293B),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
       ),
     );
   }

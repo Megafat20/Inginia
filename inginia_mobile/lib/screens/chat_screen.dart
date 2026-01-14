@@ -10,6 +10,7 @@ import '../repositories/chat_repository.dart';
 import '../providers/auth_provider.dart';
 import '../services/websocket_service.dart';
 import '../services/push_notification_service.dart';
+import '../services/api_service.dart';
 
 class ChatScreen extends StatefulWidget {
   final int reservationId;
@@ -199,14 +200,57 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  String _getMessageImageUrl(String? path) {
+    if (path == null) return "";
+    if (path.startsWith('http')) return path;
+    final apiBase = ApiService.baseUrl;
+    final root = apiBase.replaceAll('/api', '');
+    // Laravel stores it in 'chat/filename.jpg' if we use ->store('chat', 'public')
+    return '$root/storage/$path';
+  }
+
   Future<void> _pickImage() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+    final XFile? image = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 70, // Compresser un peu
+    );
     if (image != null) {
-      // TODO: Implémenter l'upload d'image vers le backend via repository
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Envoi d'image bientôt disponible !")),
-      );
+      try {
+        // Optionnel : Afficher un indicateur de chargement d'image
+        final newMessage = await _repository.sendMessage(
+          widget.reservationId,
+          null, // Pas de texte, juste image
+          imagePath: image.path,
+        );
+        if (mounted) {
+          setState(() {
+            _messages.add(newMessage);
+          });
+          _scrollToBottom();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text("Erreur d'envoi d'image: $e")));
+        }
+      }
     }
+  }
+
+  void _showFullScreenImage(String url) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+            foregroundColor: Colors.white,
+          ),
+          body: Center(child: InteractiveViewer(child: Image.network(url))),
+        ),
+      ),
+    );
   }
 
   @override
@@ -426,14 +470,41 @@ class _ChatScreenState extends State<ChatScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  msg.content,
-                  style: TextStyle(
-                    color: isMe ? Colors.white : const Color(0xFF333333),
-                    fontSize: 15,
-                    height: 1.3,
+                if (msg.imageUrl != null) ...[
+                  GestureDetector(
+                    onTap: () =>
+                        _showFullScreenImage(_getMessageImageUrl(msg.imageUrl)),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.network(
+                        _getMessageImageUrl(msg.imageUrl),
+                        width: 200,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Container(
+                            width: 200,
+                            height: 150,
+                            color: Colors.grey.shade200,
+                            child: const Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
                   ),
-                ),
+                  if (msg.content.isNotEmpty) const SizedBox(height: 8),
+                ],
+                if (msg.content.isNotEmpty)
+                  Text(
+                    msg.content,
+                    style: TextStyle(
+                      color: isMe ? Colors.white : const Color(0xFF333333),
+                      fontSize: 15,
+                      height: 1.3,
+                    ),
+                  ),
                 if (isLast) ...[
                   const SizedBox(height: 4),
                   Row(

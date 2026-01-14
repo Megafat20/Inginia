@@ -2,13 +2,15 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart'; // Import Dio
 import '../../theme/app_theme.dart';
-import 'provider_home_tab.dart';
+import 'provider_home_tab_enhanced.dart';
 import 'provider_missions_tab.dart';
 import 'provider_services_tab.dart';
 import 'provider_profile_tab.dart';
 import '../../services/websocket_service.dart';
 import '../../services/api_service.dart';
 import '../../services/tracking_service.dart';
+import '../../providers/auth_provider.dart';
+import 'package:provider/provider.dart';
 
 class ProviderDashboardScreen extends StatefulWidget {
   const ProviderDashboardScreen({super.key});
@@ -32,7 +34,7 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> {
   Widget _getCurrentTab() {
     switch (_currentIndex) {
       case 0:
-        return ProviderHomeTab(key: _homeKey);
+        return ProviderHomeTabEnhanced(key: _homeKey);
       case 1:
         return ProviderMissionsTab(key: _missionsKey);
       case 2:
@@ -40,7 +42,7 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> {
       case 3:
         return ProviderProfileTab(key: _profileKey);
       default:
-        return ProviderHomeTab(key: _homeKey);
+        return ProviderHomeTabEnhanced(key: _homeKey);
     }
   }
 
@@ -242,8 +244,6 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> {
               errorMessage += "\n" + errData['errors'].toString();
             }
           } else {
-
-            
             errorMessage += "\n" + e.response!.data.toString();
           }
         }
@@ -263,8 +263,39 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final user = context.watch<AuthProvider>().user;
+    final isAvailable = user?.isAvailable ?? false;
+
     return Scaffold(
       backgroundColor: AppTheme.background,
+      appBar: AppBar(
+        title: const Text(
+          "Tableau de bord",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        actions: [
+          Row(
+            children: [
+              Text(
+                isAvailable ? "Disponible" : "Indisponible",
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: isAvailable ? Colors.green : Colors.red,
+                ),
+              ),
+              Switch(
+                value: isAvailable,
+                activeColor: Colors.green,
+                onChanged: (value) {
+                  context.read<AuthProvider>().updateAvailability(value);
+                },
+              ),
+            ],
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       // Utilisation de _getCurrentTab() pour forcer le rebuild lors du changement d'onglet
       body: _getCurrentTab(),
       bottomNavigationBar: Container(

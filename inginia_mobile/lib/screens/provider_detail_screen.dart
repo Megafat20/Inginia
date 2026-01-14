@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
 
 import '../theme/app_theme.dart';
 
@@ -121,6 +123,10 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
           final provider = details.provider;
           final competances = details.competances;
           final reviews = details.reviews;
+          final authProvider = Provider.of<AuthProvider>(
+            context,
+            listen: false,
+          );
 
           return Stack(
             children: [
@@ -385,7 +391,9 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
 
                             // Reviews
                             _buildSectionTitle("Avis", Icons.star_outline),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 24),
+                            _buildRatingDistribution(details),
+                            const SizedBox(height: 24),
                             if (reviews.isEmpty)
                               const Text(
                                 "Aucun avis pour le moment.",
@@ -503,20 +511,39 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
                       ),
                       const Spacer(),
                       ElevatedButton(
-                        onPressed: () {
-                          showModalBottomSheet(
-                            context: context,
-                            isScrollControlled: true,
-                            backgroundColor: Colors.transparent,
-                            builder: (context) => ReservationModal(
-                              providerId: widget.providerId,
-                              providerName: provider.displayName,
-                              competances: competances,
-                            ),
-                          );
-                        },
+                        onPressed:
+                            (authProvider.isOfflineMode ||
+                                !authProvider.isAuthenticated)
+                            ? () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      !authProvider.isAuthenticated
+                                          ? "Connectez-vous pour réserver un service."
+                                          : "Action impossible en mode consultation.",
+                                    ),
+                                    backgroundColor: Colors.orange,
+                                  ),
+                                );
+                              }
+                            : () {
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.transparent,
+                                  builder: (context) => ReservationModal(
+                                    providerId: widget.providerId,
+                                    providerName: provider.displayName,
+                                    competances: competances,
+                                  ),
+                                );
+                              },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primary,
+                          backgroundColor:
+                              (authProvider.isOfflineMode ||
+                                  !authProvider.isAuthenticated)
+                              ? Colors.grey
+                              : AppTheme.primary,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 32,
@@ -528,7 +555,7 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
                           elevation: 0,
                         ),
                         child: const Text(
-                          "Réserver", // Renamed from Contacter
+                          "Réserver",
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
@@ -542,6 +569,117 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildRatingDistribution(ProviderDetails details) {
+    final total = details.completedMissions > 0
+        ? details.completedMissions
+        : details.reviews.length;
+    final distribution = details.ratingDistribution;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppTheme.surface.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppTheme.surface),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Column(
+                children: [
+                  Text(
+                    "${details.provider.avgRating ?? '0.0'}",
+                    style: const TextStyle(
+                      fontSize: 48,
+                      fontWeight: FontWeight.w900,
+                      color: AppTheme.textDark,
+                    ),
+                  ),
+                  Row(
+                    children: List.generate(
+                      5,
+                      (index) => Icon(
+                        Icons.star_rounded,
+                        size: 18,
+                        color: index < (details.provider.avgRating ?? 0).floor()
+                            ? Colors.amber
+                            : Colors.grey.shade300,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "${details.reviews.length} avis",
+                    style: const TextStyle(
+                      color: AppTheme.textLight,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 32),
+              Expanded(
+                child: Column(
+                  children: List.generate(5, (index) {
+                    final star = 5 - index;
+                    final count = distribution[star] ?? 0;
+                    final percentage = total > 0 ? (count / total) : 0.0;
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        children: [
+                          Text(
+                            "$star",
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Stack(
+                              children: [
+                                Container(
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade200,
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                ),
+                                FractionallySizedBox(
+                                  widthFactor: percentage,
+                                  child: Container(
+                                    height: 6,
+                                    decoration: BoxDecoration(
+                                      color: star >= 4
+                                          ? Colors.green.shade400
+                                          : star >= 3
+                                          ? Colors.amber.shade400
+                                          : Colors.orange.shade400,
+                                      borderRadius: BorderRadius.circular(3),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

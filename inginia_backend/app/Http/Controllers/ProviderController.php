@@ -28,6 +28,7 @@ class ProviderController extends Controller
                 'profession' => $u->professions, // pour les professionnels
                 'service_name' => $u->service_name, // pour les agences
                 'min_price' => $u->min_price,
+                'is_available' => $u->is_available,
             ]);
 
         return response()->json($providers);
@@ -205,6 +206,20 @@ class ProviderController extends Controller
         // Transforme professions pour frontend
         $professions = $provider->professions->map(fn($p) => ['id'=>$p->id, 'name'=>$p->name]);
 
+        // Rating distribution
+        $ratingDistribution = $provider->reviewsReceived()
+            ->select('note', DB::raw('count(*) as total'))
+            ->groupBy('note')
+            ->get()
+            ->pluck('total', 'note')
+            ->toArray();
+
+        // Ensure all stars 1-5 have a value
+        $distribution = [];
+        for ($i = 1; $i <= 5; $i++) {
+            $distribution[$i] = $ratingDistribution[$i] ?? 0;
+        }
+
         return response()->json([
             'provider' => [
                 'id' => $provider->id,
@@ -232,6 +247,7 @@ class ProviderController extends Controller
                 'total_services' => $provider->competances()->count(),
                 'total_reviews' => $provider->reviewsReceived()->count(),
                 'total_completed' => $provider->receivedReservations()->where('status', 'completed')->count(),
+                'rating_distribution' => $distribution,
             ],
             'reviews' => $reviews,
             'reservations' => $reservations,

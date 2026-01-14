@@ -84,9 +84,14 @@ class UserController extends Controller
     {
         $user = $request->user();
 
+        // Si c'est un changement de mot de passe
+        if ($request->has('current_password')) {
+            return $this->updatePassword($request, $user);
+        }
+
         $data = $request->validate([
             'name' => 'nullable|string|max:255',
-            'email' => 'required|email|unique:users,email,'.$user->id,
+            'email' => 'nullable|email|unique:users,email,'.$user->id,
             'phone' => 'nullable|string|max:20',
             'adresse' => 'nullable|string',
             'location' => 'nullable|string',
@@ -99,48 +104,54 @@ class UserController extends Controller
             'longitude' => 'nullable|numeric',
         ]);
 
-        // Maj infos simples
-        $user->update($data);
-
-        // Synchro relations
-        if ($request->has('profession_ids')) {
-            $user->professions()->sync($request->profession_ids);
-        }
-        if ($request->has('competances')) {
-            $user->competances()->sync($request->competances);
-        }
-
-        // Photo
+        // Upload photo si présente
         if ($request->hasFile('profile_photo')) {
-            $path = $request->file('profile_photo')->store('profile_photos', 'public');
-            $user->photo = basename($path);
-            $user->save();
+            $file = $request->file('profile_photo');
+            $photoName = time().'_'.$file->getClientOriginalName();
+            $file->storeAs('public/profile_photos', $photoName);
+            $data['photo'] = $photoName;
         }
 
-        return response()->json($user->load(['professions', 'competances']));
+        // Mise à jour des données de base
+        $user->update(array_filter($data, fn ($value) => ! is_null($value)));
+
+        // Mise à jour des professions si présentes
+        if (isset($data['profession_ids'])) {
+            $user->professions()->sync($data['profession_ids']);
+        }
+
+        return response()->json([
+            'message' => 'Profil mis à jour avec succès',
+            'user' => $user->load(['professions', 'competances']),
+        ]);
     }
 
+    /**
+     * Mettre à jour le mot de passe
+     */
+    private function updatePassword(Request $request, $user)
+    {
+        $data = $request->validate([
+            'current_password' => 'required|string',
+            'password' => 'required|string|min:6|confirmed',
+        ]);
 
-    public function updatePassword(Request $request)
-{
-    $user = $request->user();
+        // Vérifier le mot de passe actuel
+        if (!Hash::check($data['current_password'], $user->password)) {
+            return response()->json([
+                'message' => 'Le mot de passe actuel est incorrect'
+            ], 422);
+        }
 
-    $data = $request->validate([
-        'current_password' => 'required',
-        'password' => 'required|confirmed|min:8',
-    ]);
+        // Mettre à jour le mot de passe
+        $user->update([
+            'password' => Hash::make($data['password'])
+        ]);
 
-    if (!\Hash::check($data['current_password'], $user->password)) {
-        return response()->json(['error' => 'Mot de passe actuel incorrect'], 422);
+        return response()->json([
+            'message' => 'Mot de passe modifié avec succès'
+        ]);
     }
-
-    $user->password = bcrypt($data['password']);
-    $user->save();
-
-    return response()->json(['message' => 'Mot de passe mis à jour avec succès']);
-}
-
-    
     /**
      * Supprimer un utilisateur
      */

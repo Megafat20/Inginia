@@ -44,15 +44,18 @@ dependencies:
   latlong2: ^0.9.1
   permission_handler: ^12.0.1
   # Firebase for push notifications
-  firebase_core: ^3.10.0
-  firebase_messaging: ^15.2.0
+  firebase_core: ^4.3.0
+  firebase_messaging: ^16.1.0
   flutter_local_notifications: ^18.0.1
+  # Reviews and images
+  timeago: ^3.7.0
+  image_picker: ^1.1.2
   # WebSocket for Reverb
   web_socket_channel: ^3.0.1
   shimmer: ^3.0.0
   lottie: ^3.1.2
-  image_picker: ^1.1.2
   shared_preferences: ^2.5.4
+  fl_chart: ^0.69.0
 
 dev_dependencies:
   flutter_test:

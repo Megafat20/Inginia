@@ -6,6 +6,7 @@ class ProviderDetails {
   final List<Review> reviews;
   final List<PortfolioItem> portfolio;
   final int completedMissions;
+  final Map<int, int> ratingDistribution;
 
   ProviderDetails({
     required this.provider,
@@ -13,12 +14,27 @@ class ProviderDetails {
     required this.reviews,
     required this.portfolio,
     this.completedMissions = 0,
+    this.ratingDistribution = const {1: 0, 2: 0, 3: 0, 4: 0, 5: 0},
   });
 
   factory ProviderDetails.fromJson(Map<String, dynamic> json) {
+    // Parser la distribution
+    final Map<int, int> distribution = {};
+    if (json['stats']?['rating_distribution'] != null) {
+      final distJson = json['stats']['rating_distribution'] as Map;
+      distJson.forEach((key, value) {
+        final star = int.tryParse(key.toString()) ?? 0;
+        final count = int.tryParse(value.toString()) ?? 0;
+        if (star >= 1 && star <= 5) {
+          distribution[star] = count;
+        }
+      });
+    }
+
     return ProviderDetails(
       provider: User.fromJson(json['provider']),
       completedMissions: json['stats']?['total_completed'] ?? 0,
+      ratingDistribution: distribution,
       competances:
           (json['competances'] as List?)
               ?.map((e) => Competance.fromJson(e))

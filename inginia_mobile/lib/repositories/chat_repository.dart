@@ -29,19 +29,29 @@ class ChatRepository {
     }
   }
 
-  /// Send a new message in a reservation chat
-  Future<Message> sendMessage(int reservationId, String content) async {
+  /// Send a new message in a reservation chat (text and/or image)
+  Future<Message> sendMessage(
+    int reservationId,
+    String? content, {
+    String? imagePath,
+  }) async {
     try {
+      dynamic data;
+
+      if (imagePath != null) {
+        data = FormData.fromMap({
+          if (content != null) 'content': content,
+          'image': await MultipartFile.fromFile(imagePath),
+        });
+      } else {
+        data = {'content': content};
+      }
+
       final response = await _apiService.client.post(
         '/reservations/$reservationId/messages',
-        data: {'content': content},
+        data: data,
       );
-      /*
-        Response format expected:
-        {
-          "message": { "id": ... }
-        }
-      */
+
       return Message.fromJson(response.data['message']);
     } on DioException catch (e) {
       throw Exception(e.response?.data['message'] ?? 'Erreur d\'envoi');

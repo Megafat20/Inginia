@@ -47,7 +47,7 @@ class SOSController extends Controller
             $tokens = $provider->deviceTokens()->where('revoked', false)->pluck('token');
             if ($tokens->isNotEmpty()) {
                 try {
-                    $fcmService->sendNotification(
+                    $fcmService->sendToMultipleTokens(
                         $tokens->toArray(),
                         "🚨 URGENCE SOS : " . $request->problem_type,
                         "Un client a besoin d'aide immédiatement près de chez vous.",

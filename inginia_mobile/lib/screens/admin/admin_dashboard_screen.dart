@@ -4,6 +4,7 @@ import '../../theme/app_theme.dart';
 import '../../services/admin_service.dart';
 import '../../providers/auth_provider.dart';
 import 'provider_validation_screen.dart';
+import 'users_management_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -164,7 +165,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                 physics: NeverScrollableScrollPhysics(),
                                 mainAxisSpacing: 16,
                                 crossAxisSpacing: 16,
-                                childAspectRatio: 1.3,
+                                childAspectRatio: 1.1,
                                 children: [
                                   _buildStatCard(
                                     'Total Utilisateurs',
@@ -247,9 +248,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                 Icons.manage_accounts,
                                 Colors.blue,
                                 () {
-                                  // TODO: Navigate to users management
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('À venir')),
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          UsersManagementScreen(),
+                                    ),
                                   );
                                 },
                               ),
@@ -304,7 +308,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           Text(
             value,
             style: TextStyle(
-              fontSize: 28,
+              fontSize: 24,
               fontWeight: FontWeight.w900,
               color: AppTheme.textDark,
             ),

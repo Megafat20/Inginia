@@ -10,11 +10,37 @@ class AuthProvider extends ChangeNotifier {
   User? _user;
   bool _isLoading = false;
   String? _error;
+  bool _isOfflineMode = false;
+  bool _showLogin = false;
 
   User? get user => _user;
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get isAuthenticated => _user != null;
+  bool get isOfflineMode => _isOfflineMode;
+  bool get shouldShowLogin => _showLogin;
+
+  void setShowLogin(bool value) {
+    _showLogin = value;
+    notifyListeners();
+  }
+
+  void setOfflineMode(bool value) {
+    _isOfflineMode = value;
+    notifyListeners();
+  }
+
+  Future<void> updateAvailability(bool value) async {
+    try {
+      await _authRepository.updateAvailability(value);
+      if (_user != null) {
+        _user = _user!.copyWith(isAvailable: value);
+        notifyListeners();
+      }
+    } catch (e) {
+      print("Error updating availability: $e");
+    }
+  }
 
   // Try to restore session on app start
   Future<void> checkAuth() async {
@@ -29,6 +55,7 @@ class AuthProvider extends ChangeNotifier {
             .then((loc) {
               if (loc != null) {
                 _authRepository.updateProfile(
+                  email: _user?.email, // Required by backend validation
                   latitude: loc.latitude,
                   longitude: loc.longitude,
                 );
@@ -59,6 +86,7 @@ class AuthProvider extends ChangeNotifier {
         final loc = await LocationService().getCurrentLocation();
         if (loc != null) {
           await _authRepository.updateProfile(
+            email: _user?.email, // Required by backend validation
             latitude: loc.latitude,
             longitude: loc.longitude,
           );
@@ -89,6 +117,7 @@ class AuthProvider extends ChangeNotifier {
     String? role,
     bool? isAgency,
     List<String>? professionIds,
+    List<String>? customProfessions,
     String? minPrice,
     String? slogan,
     String? location,
@@ -109,6 +138,7 @@ class AuthProvider extends ChangeNotifier {
         role: role,
         isAgency: isAgency,
         professionIds: professionIds,
+        customProfessions: customProfessions,
         minPrice: minPrice,
         slogan: slogan,
         location: location,
@@ -132,6 +162,7 @@ class AuthProvider extends ChangeNotifier {
   Future<void> logout() async {
     await _authRepository.logout();
     _user = null;
+    _isOfflineMode = false;
     notifyListeners();
   }
 

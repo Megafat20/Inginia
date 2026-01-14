@@ -41,11 +41,25 @@ class LocationService {
 
     // Permissions granted - get current position
     try {
-      return await Geolocator.getCurrentPosition();
+      return await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 10,
+        ),
+      );
     } catch (e) {
       print("Geolocator error: $e");
       return null;
     }
+  }
+
+  /// Get a stream of location updates
+  Stream<Position> getPositionStream() {
+    const LocationSettings locationSettings = LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 10, // Update every 10 meters
+    );
+    return Geolocator.getPositionStream(locationSettings: locationSettings);
   }
 
   /// Open app settings

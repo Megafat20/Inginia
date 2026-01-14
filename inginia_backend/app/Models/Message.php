@@ -10,9 +10,10 @@ class Message extends Model
     use HasFactory;
 
     protected $fillable = [
-        'reservation_id', // <-- utilise reservation au lieu de conversation
+        'reservation_id', 
         'sender_id',
         'message',
+        'image_url',
     ];
 
     public function user() {

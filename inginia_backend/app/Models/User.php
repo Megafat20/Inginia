@@ -27,6 +27,9 @@ class User extends Authenticatable
         'service',
         'is_validated',
         'is_agency',
+        'is_available',
+        'google_id',
+        'fcm_token',
     ];
 
     protected $hidden = [
@@ -36,6 +39,9 @@ class User extends Authenticatable
 
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'is_validated' => 'boolean',
+        'is_agency' => 'boolean',
+        'is_available' => 'boolean',
     ];
 
     // 🔹 Services proposés par le provider

@@ -9,6 +9,8 @@ class Profession extends Model
 {
     use HasFactory;
 
+    protected $fillable = ['name', 'description'];
+
     public function prestataires()
 {
     return $this->belongsToMany(User::class, 'prestataire_professions', 'profession_id', 'prestataire_id');

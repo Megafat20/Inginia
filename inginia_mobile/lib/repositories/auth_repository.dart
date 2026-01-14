@@ -44,6 +44,7 @@ class AuthRepository {
     String? role, // 'client' or 'prestataire'
     bool? isAgency,
     List<String>? professionIds,
+    List<String>? customProfessions,
     String? minPrice,
     String? slogan,
     String? location,
@@ -61,10 +62,11 @@ class AuthRepository {
       };
 
       if (role == 'prestataire') {
+        data['name'] =
+            name; // Nom requis pour tous (nom agence ou nom prestataire)
+
         if (isAgency == true) {
-          data['service'] = name; // Agency name goes as service
-        } else {
-          data['name'] = name; // Individual name
+          data['service'] = name; // Agency name goes as service too
         }
 
         data['is_agency'] = isAgency == true;
@@ -72,6 +74,9 @@ class AuthRepository {
         // Professions
         if (professionIds != null && professionIds.isNotEmpty) {
           data['profession_ids'] = professionIds;
+        }
+        if (customProfessions != null && customProfessions.isNotEmpty) {
+          data['custom_professions'] = customProfessions;
         }
 
         data['min_price'] = minPrice ?? '';
@@ -162,13 +167,26 @@ class AuthRepository {
       final response = await _apiService.client.post('/me', data: formData);
 
       if (response.statusCode == 200) {
-        return User.fromJson(response.data);
+        return User.fromJson(response.data['user']);
       }
     } on DioException catch (e) {
       throw Exception(
         e.response?.data['message'] ?? 'Erreur lors de la mise à jour',
       );
     }
+    return null;
+  }
+
+  Future<User?> updateAvailability(bool value) async {
+    try {
+      final response = await _apiService.client.put(
+        '/me/availability',
+        data: {'is_available': value},
+      );
+      if (response.statusCode == 200) {
+        return await getMe();
+      }
+    } catch (_) {}
     return null;
   }
 }

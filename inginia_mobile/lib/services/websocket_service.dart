@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
+import 'package:dio/dio.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'api_service.dart';
 
@@ -192,9 +193,27 @@ class WebSocketService {
 
     if (_socketId == null) throw Exception("Socket ID not available");
 
-    final response = await ApiService().client.post(
-      '/broadcasting/auth',
+    // Broadcasting auth endpoint is at root level, not under /api
+    // So we need to construct the full URL manually
+    String host = '127.0.0.1';
+    if (Platform.isAndroid) {
+      host = '10.0.2.2';
+    }
+    final authUrl = 'http://$host:8000/broadcasting/auth';
+
+    // Get the auth token for the request
+    final token = await ApiService().storage.read(key: 'auth_token');
+
+    final response = await Dio().post(
+      authUrl,
       data: {'socket_id': _socketId, 'channel_name': channel},
+      options: Options(
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ),
     );
 
     return response.data;

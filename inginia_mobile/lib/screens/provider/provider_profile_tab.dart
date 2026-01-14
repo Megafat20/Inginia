@@ -198,7 +198,7 @@ class _ProviderProfileTabState extends State<ProviderProfileTab> {
           ),
         ),
       ),
-    );  
+    );
   }
 
   @override
@@ -274,6 +274,47 @@ class _ProviderProfileTabState extends State<ProviderProfileTab> {
                   color: AppTheme.textDark,
                 ),
               ),
+              const SizedBox(height: 8),
+              // Verified Badge
+              if (user.isValidated)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.blue.shade600, Colors.blue.shade400],
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.blue.withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.verified_rounded,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 6),
+                      const Text(
+                        'Prestataire Vérifié',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               if (user.slogan != null && user.slogan!.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Padding(
@@ -405,6 +446,22 @@ class _ProviderProfileTabState extends State<ProviderProfileTab> {
                 ),
               ),
 
+              const SizedBox(height: 16),
+
+              OutlinedButton.icon(
+                onPressed: () => _showChangePasswordDialog(),
+                icon: const Icon(Icons.lock_reset_rounded),
+                label: const Text("Changer le mot de passe"),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.orange.shade700,
+                  side: BorderSide(color: Colors.orange.shade700, width: 1.5),
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                ),
+              ),
+
               const SizedBox(height: 30),
 
               TextButton.icon(
@@ -420,6 +477,37 @@ class _ProviderProfileTabState extends State<ProviderProfileTab> {
           ),
         ),
       ],
+    );
+  }
+
+  void _showChangePasswordDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => ChangePasswordDialog(
+        onSave: (data) async {
+          try {
+            await _repository.updateProfile(data);
+            if (mounted) {
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text("Mot de passe modifié avec succès"),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            }
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text("Erreur: ${e.toString()}"),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          }
+        },
+      ),
     );
   }
 
@@ -491,6 +579,7 @@ class EditProfileModal extends StatefulWidget {
 class _EditProfileModalState extends State<EditProfileModal> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameController;
+  late TextEditingController _emailController;
   late TextEditingController _phoneController;
   late TextEditingController _addressController;
   late TextEditingController _sloganController;
@@ -500,6 +589,7 @@ class _EditProfileModalState extends State<EditProfileModal> {
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.user.name);
+    _emailController = TextEditingController(text: widget.user.email);
     _phoneController = TextEditingController(text: widget.user.phone ?? '');
     _addressController = TextEditingController(
       text: widget.user.location ?? '',
@@ -510,6 +600,7 @@ class _EditProfileModalState extends State<EditProfileModal> {
   @override
   void dispose() {
     _nameController.dispose();
+    _emailController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
     _sloganController.dispose();
@@ -565,6 +656,17 @@ class _EditProfileModalState extends State<EditProfileModal> {
               ),
               const SizedBox(height: 16),
               TextFormField(
+                controller: _emailController,
+                decoration: _inputDecoration("Email"),
+                keyboardType: TextInputType.emailAddress,
+                validator: (v) {
+                  if (v!.isEmpty) return "Requis";
+                  if (!v.contains('@')) return "Email invalide";
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
                 controller: _phoneController,
                 decoration: _inputDecoration("Téléphone"),
                 keyboardType: TextInputType.phone,
@@ -590,6 +692,7 @@ class _EditProfileModalState extends State<EditProfileModal> {
                           setState(() => _isLoading = true);
                           await widget.onSave({
                             'name': _nameController.text,
+                            'email': _emailController.text,
                             'phone': _phoneController.text,
                             'location': _addressController.text,
                             'slogan': _sloganController.text,
@@ -637,6 +740,234 @@ class _EditProfileModalState extends State<EditProfileModal> {
       ),
       filled: true,
       fillColor: Colors.grey.shade50,
+    );
+  }
+}
+
+// Change Password Dialog
+class ChangePasswordDialog extends StatefulWidget {
+  final Function(Map<String, dynamic>) onSave;
+
+  const ChangePasswordDialog({super.key, required this.onSave});
+
+  @override
+  State<ChangePasswordDialog> createState() => _ChangePasswordDialogState();
+}
+
+class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _currentPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  bool _isLoading = false;
+  bool _obscureCurrent = true;
+  bool _obscureNew = true;
+  bool _obscureConfirm = true;
+
+  @override
+  void dispose() {
+    _currentPasswordController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        Icons.lock_reset_rounded,
+                        color: Colors.orange.shade700,
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    const Expanded(
+                      child: Text(
+                        "Changer le mot de passe",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textDark,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // Current Password
+                TextFormField(
+                  controller: _currentPasswordController,
+                  obscureText: _obscureCurrent,
+                  decoration: InputDecoration(
+                    labelText: "Mot de passe actuel",
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscureCurrent
+                            ? Icons.visibility_off
+                            : Icons.visibility,
+                      ),
+                      onPressed: () {
+                        setState(() => _obscureCurrent = !_obscureCurrent);
+                      },
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey.shade50,
+                  ),
+                  validator: (v) => v!.isEmpty ? "Requis" : null,
+                ),
+                const SizedBox(height: 16),
+
+                // New Password
+                TextFormField(
+                  controller: _newPasswordController,
+                  obscureText: _obscureNew,
+                  decoration: InputDecoration(
+                    labelText: "Nouveau mot de passe",
+                    prefixIcon: const Icon(Icons.lock),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscureNew ? Icons.visibility_off : Icons.visibility,
+                      ),
+                      onPressed: () {
+                        setState(() => _obscureNew = !_obscureNew);
+                      },
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey.shade50,
+                  ),
+                  validator: (v) {
+                    if (v!.isEmpty) return "Requis";
+                    if (v.length < 6) {
+                      return "Minimum 6 caractères";
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Confirm Password
+                TextFormField(
+                  controller: _confirmPasswordController,
+                  obscureText: _obscureConfirm,
+                  decoration: InputDecoration(
+                    labelText: "Confirmer le mot de passe",
+                    prefixIcon: const Icon(Icons.lock_clock),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscureConfirm
+                            ? Icons.visibility_off
+                            : Icons.visibility,
+                      ),
+                      onPressed: () {
+                        setState(() => _obscureConfirm = !_obscureConfirm);
+                      },
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey.shade50,
+                  ),
+                  validator: (v) {
+                    if (v!.isEmpty) return "Requis";
+                    if (v != _newPasswordController.text) {
+                      return "Les mots de passe ne correspondent pas";
+                    }
+                    return null;
+                  },
+                ),
+
+                const SizedBox(height: 24),
+
+                // Buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _isLoading
+                            ? null
+                            : () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text("Annuler"),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _isLoading
+                            ? null
+                            : () async {
+                                if (_formKey.currentState!.validate()) {
+                                  setState(() => _isLoading = true);
+                                  await widget.onSave({
+                                    'current_password':
+                                        _currentPasswordController.text,
+                                    'password': _newPasswordController.text,
+                                    'password_confirmation':
+                                        _confirmPasswordController.text,
+                                  });
+                                }
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange.shade700,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: _isLoading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text("Modifier"),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

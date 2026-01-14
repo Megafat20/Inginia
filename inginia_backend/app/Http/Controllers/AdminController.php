@@ -29,6 +29,8 @@ class AdminController extends Controller
                     'adresse' => $user->adresse,
                     'min_price' => $user->min_price,
                     'slogan' => $user->slogan,
+                    'latitude' => $user->latitude,
+                    'longitude' => $user->longitude,
                     'created_at' => $user->created_at,
                     'profile_photo' => $user->photo 
                         ? asset('storage/profile_photos/'.$user->photo) 
@@ -62,6 +64,9 @@ class AdminController extends Controller
                     'service' => $user->service,
                     'is_agency' => $user->is_agency,
                     'location' => $user->location,
+                    'adresse' => $user->adresse,
+                    'latitude' => $user->latitude,
+                    'longitude' => $user->longitude,
                     'min_price' => $user->min_price,
                     'slogan' => $user->slogan,
                     'created_at' => $user->created_at,
@@ -161,5 +166,41 @@ class AdminController extends Controller
             });
 
         return response()->json($users);
+    }
+    /**
+     * Update a user (Admin)
+     */
+    public function updateUser(Request $request, $id)
+    {
+        $user = User::findOrFail($id);
+
+        $request->validate([
+            'name' => 'required|string',
+            'email' => 'required|email|unique:users,email,' . $id,
+            'role' => 'required|in:client,prestataire,admin',
+            'phone' => 'nullable|string',
+            'is_validated' => 'boolean',
+            'is_agency' => 'boolean',
+        ]);
+
+        $user->update($request->all());
+
+        return response()->json([
+            'message' => 'Utilisateur mis à jour avec succès',
+            'user' => $user
+        ]);
+    }
+
+    /**
+     * Delete a user (Admin)
+     */
+    public function deleteUser($id)
+    {
+        $user = User::findOrFail($id);
+        $user->delete();
+
+        return response()->json([
+            'message' => 'Utilisateur supprimé avec succès'
+        ]);
     }
 }

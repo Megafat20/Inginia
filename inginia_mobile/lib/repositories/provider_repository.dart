@@ -8,6 +8,25 @@ import '../models/availability_model.dart';
 class ProviderRepository {
   final ApiService _apiService = ApiService();
 
+  Future<void> updateMissionLocation(
+    int reservationId,
+    double lat,
+    double lng,
+  ) async {
+    try {
+      await _apiService.client.post(
+        '/reservations/$reservationId/location',
+        data: {'latitude': lat, 'longitude': lng},
+      );
+    } on DioException catch (e) {
+      print("Error updating mission location: $e");
+    }
+  }
+
+  // -----------------------------------------------------------------------------
+  // 3. Provider Actions (Accept/Decline/Complete)
+  // -----------------------------------------------------------------------------
+
   // -----------------------------------------------------------------------------
   // 1. Provider Discovery (Public/Client View)
   // -----------------------------------------------------------------------------
@@ -374,6 +393,23 @@ class ProviderRepository {
       throw Exception(
         e.response?.data['message'] ?? 'Erreur lors de la suppression',
       );
+    }
+  }
+
+  // -----------------------------------------------------------------------------
+  // 9. Provider Statistics
+  // -----------------------------------------------------------------------------
+
+  Future<Map<String, dynamic>> getProviderStats() async {
+    try {
+      final response = await _apiService.client.get('/provider/stats');
+      if (response.statusCode == 200) {
+        return response.data as Map<String, dynamic>;
+      }
+      return {};
+    } catch (e) {
+      print("Error fetching provider stats: $e");
+      return {};
     }
   }
 }

@@ -5,6 +5,7 @@ import '../providers/auth_provider.dart';
 import '../models/user_model.dart';
 import 'profile/edit_profile_screen.dart';
 import 'favorites_screen.dart';
+import '../providers/theme_provider.dart';
 
 class ClientProfileScreen extends StatefulWidget {
   const ClientProfileScreen({super.key});
@@ -20,7 +21,6 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
       MaterialPageRoute(builder: (_) => const EditProfileScreen()),
     );
   }
-
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().user;
@@ -228,6 +228,24 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                         MaterialPageRoute(
                           builder: (_) => const FavoritesScreen(),
                         ),
+                      );
+                    },
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Bouton Mode Sombre
+                  Consumer<ThemeProvider>(
+                    builder: (context, themeProvider, child) {
+                      return _buildActionButton(
+                        icon: themeProvider.isDarkMode
+                            ? Icons.light_mode_rounded
+                            : Icons.dark_mode_rounded,
+                        label: themeProvider.isDarkMode
+                            ? 'Désactiver le mode sombre'
+                            : 'Activer le mode sombre',
+                        color: Colors.purple,
+                        onTap: () => themeProvider.toggleTheme(),
                       );
                     },
                   ),

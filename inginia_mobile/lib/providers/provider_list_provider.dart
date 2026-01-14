@@ -8,10 +8,24 @@ class ProviderListProvider extends ChangeNotifier {
   List<User> _providers = [];
   bool _isLoading = false;
   String? _error;
+  bool _filterOnlyAvailable = false;
 
   List<User> get providers => _providers;
   bool get isLoading => _isLoading;
   String? get error => _error;
+  bool get filterOnlyAvailable => _filterOnlyAvailable;
+
+  List<User> get filteredProviders {
+    if (_filterOnlyAvailable) {
+      return _providers.where((p) => p.isAvailable).toList();
+    }
+    return _providers;
+  }
+
+  void setFilterOnlyAvailable(bool value) {
+    _filterOnlyAvailable = value;
+    notifyListeners();
+  }
 
   Future<void> fetchProviders() async {
     _isLoading = true;

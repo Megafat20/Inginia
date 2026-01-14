@@ -28,6 +28,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String _userType = 'client'; // 'client' or 'prestataire'
   bool _isAgency = false;
   final List<String> _selectedProfessions = [];
+  final List<String> _customProfessions = [];
 
   final _formKey = GlobalKey<FormState>();
 
@@ -230,7 +231,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               TextFormField(
                                 controller: _addressController,
                                 decoration: _inputDecoration(
-                                  'Abidjan, Cocody...',
+                                  'Niamey, Niger...',
                                   Icons.location_on_outlined,
                                 ),
                                 validator: (val) =>
@@ -467,41 +468,112 @@ class _RegisterScreenState extends State<RegisterScreen> {
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: _mockProfessions.map((prof) {
-            final isSelected = _selectedProfessions.contains(prof['id']);
-            return GestureDetector(
-              onTap: () {
-                setState(() {
-                  if (isSelected) {
-                    _selectedProfessions.remove(prof['id']);
-                  } else {
-                    _selectedProfessions.add(prof['id']);
-                  }
-                });
-              },
+          children: [
+            ..._mockProfessions.map((prof) {
+              final isSelected = _selectedProfessions.contains(prof['id']);
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    if (isSelected) {
+                      _selectedProfessions.remove(prof['id']);
+                    } else {
+                      _selectedProfessions.add(prof['id']);
+                    }
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isSelected ? AppTheme.primary : Colors.grey[100],
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: isSelected ? AppTheme.primary : Colors.grey[300]!,
+                    ),
+                  ),
+                  child: Text(
+                    prof['name'],
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : Colors.grey[700],
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              );
+            }),
+            // Custom Professions Chips
+            ..._customProfessions.map((profName) {
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _customProfessions.remove(profName);
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppTheme.primary),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        profName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.close, size: 14, color: Colors.white),
+                    ],
+                  ),
+                ),
+              );
+            }),
+            // "Autre" Button
+            GestureDetector(
+              onTap: _showAddProfessionDialog,
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: isSelected ? AppTheme.primary : Colors.grey[100],
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: isSelected ? AppTheme.primary : Colors.grey[300]!,
+                    color: AppTheme.primary,
+                    style: BorderStyle.solid,
                   ),
                 ),
-                child: Text(
-                  prof['name'],
-                  style: TextStyle(
-                    color: isSelected ? Colors.white : Colors.grey[700],
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.add, size: 16, color: AppTheme.primary),
+                    SizedBox(width: 4),
+                    Text(
+                      'Autre',
+                      style: TextStyle(
+                        color: AppTheme.primary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            );
-          }).toList(),
+            ),
+          ],
         ),
         if (_selectedProfessions.isEmpty)
           Padding(
@@ -553,7 +625,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   // --- LOGIC ---
 
   Future<void> _handleRegister(AuthProvider authProvider) async {
-    if (_userType == 'prestataire' && _selectedProfessions.isEmpty) {
+    if (_userType == 'prestataire' &&
+        _selectedProfessions.isEmpty &&
+        _customProfessions.isEmpty) {
       // Show validation error for missing professions
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -581,6 +655,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       role: _userType,
       isAgency: _userType == 'prestataire' ? _isAgency : null,
       professionIds: _userType == 'prestataire' ? _selectedProfessions : null,
+      customProfessions: _userType == 'prestataire' ? _customProfessions : null,
       minPrice: _userType == 'prestataire' ? _minPriceController.text : null,
       slogan: _userType == 'prestataire' ? _sloganController.text : null,
       location: _addressController.text,
@@ -598,6 +673,46 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
+  void _showAddProfessionDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Ajouter une profession'),
+        content: TextField(
+          controller: controller,
+          decoration: InputDecoration(
+            hintText: 'Ex: Architecte',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          textCapitalization: TextCapitalization.sentences,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final val = controller.text.trim();
+              if (val.isNotEmpty) {
+                setState(() {
+                  _customProfessions.add(val);
+                });
+                Navigator.pop(ctx);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primary,
+              foregroundColor: Colors.white,
+            ),
+            child: Text('Ajouter'),
+          ),
+        ],
+      ),
+    );
+  }
+
   TextStyle get _labelStyle => GoogleFonts.inter(
     fontWeight: FontWeight.w600,
     color: Colors.grey[700],
@@ -607,7 +722,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   InputDecoration _inputDecoration(String hint, IconData icon) {
     return InputDecoration(
       hintText: hint,
-      prefixIcon: Icon(icon, size: 20),
+      prefixIcon: Icon(icon, size: 20, color: AppTheme.textLight),
       // Le reste est dans AppTheme
     );
   }

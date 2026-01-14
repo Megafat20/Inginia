@@ -71,7 +71,7 @@ class ReservationController extends Controller
     public function updateStatus(Request $request, $id)
     {
         $request->validate([
-            'status' => 'required|in:pending,accepted,declined,completed,cancelled',
+            'status' => 'required|in:pending,accepted,declined,completed,cancelled,in_progress',
             'reason' => 'nullable|string|max:500', // Added for cancellation reason
         ]);
 
@@ -236,17 +236,24 @@ class ReservationController extends Controller
     public function sendMessage(Request $request, $reservationId)
     {
         $request->validate([
-            'content' => 'required|string',
+            'content' => 'nullable|string',
+            'image' => 'nullable|image|max:5000', // max 5MB
         ]);
+
+        $imageUrl = null;
+        if ($request->hasFile('image')) {
+            $path = $request->file('image')->store('chat', 'public');
+            $imageUrl = $path;
+        }
 
         $message = Message::create([
             'reservation_id' => $reservationId,
             'sender_id' => auth()->id(),
             'message' => $request->input('content'),
+            'image_url' => $imageUrl,
         ]);
 
         broadcast(new MessageSent($message))->toOthers();
-
 
         return response()->json(['message' => $message], 201);
     }

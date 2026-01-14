@@ -80,11 +80,12 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
 
   @override
   Widget build(BuildContext context) {
-    // final authProvider = Provider.of<AuthProvider>(context);
+    final authProvider = Provider.of<AuthProvider>(context);
     final providerListProvider = Provider.of<ProviderListProvider>(context);
 
     return Scaffold(
-      floatingActionButton: _tabController.index == 0
+      floatingActionButton:
+          (_tabController.index == 0 && !authProvider.isOfflineMode)
           ? FloatingActionButton.extended(
               onPressed: _showSOSDialog,
               backgroundColor: Colors.red,
@@ -139,6 +140,77 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
           // Main Content
           Column(
             children: [
+              // Mode Consultation Banner
+              if (!authProvider.isAuthenticated || authProvider.isOfflineMode)
+                Container(
+                  width: double.infinity,
+                  color: Colors.amber.shade700,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: SafeArea(
+                    bottom: false,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.visibility_off_outlined,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  !authProvider.isAuthenticated
+                                      ? "Mode Consultation (Connectez-vous pour commander)"
+                                      : "Mode Consultation : Compte en attente de validation",
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            if (!authProvider.isAuthenticated) {
+                              authProvider.setShowLogin(true);
+                            } else {
+                              authProvider.setOfflineMode(false);
+                            }
+                          },
+                          style: TextButton.styleFrom(
+                            backgroundColor: Colors.white.withOpacity(0.2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 0,
+                            ),
+                            minimumSize: const Size(0, 30),
+                          ),
+                          child: Text(
+                            !authProvider.isAuthenticated
+                                ? "Se connecter"
+                                : "Quitter",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
               // Hero Section (only visible on Explorer tab)
               AnimatedContainer(
                 duration: const Duration(milliseconds: 500),
@@ -659,9 +731,85 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
                     ],
                   ),
                 ),
+                const SizedBox(height: 24),
+
+                // Filter Chips
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildFilterChip(
+                        icon: Icons.flash_on_rounded,
+                        label: 'Disponible',
+                        isActive: context
+                            .watch<ProviderListProvider>()
+                            .filterOnlyAvailable,
+                        onTap: () {
+                          final provider = context.read<ProviderListProvider>();
+                          provider.setFilterOnlyAvailable(
+                            !provider.filterOnlyAvailable,
+                          );
+                        },
+                      ),
+                      const SizedBox(width: 12),
+                      _buildFilterChip(
+                        icon: Icons.star_rounded,
+                        label: 'Mieux notés',
+                        isActive: _sortOption == 'note',
+                        onTap: () => setState(() => _sortOption = 'note'),
+                      ),
+                      const SizedBox(width: 12),
+                      _buildFilterChip(
+                        icon: Icons.euro_symbol_rounded,
+                        label: 'Prix bas',
+                        isActive: _sortOption == 'prix',
+                        onTap: () => setState(() => _sortOption = 'prix'),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterChip({
+    required IconData icon,
+    required String label,
+    required bool isActive,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.white : Colors.white.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(25),
+          border: Border.all(
+            color: isActive ? Colors.white : Colors.white.withOpacity(0.3),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: isActive ? AppTheme.primary : Colors.white,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: isActive ? AppTheme.primary : Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -720,7 +868,14 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
             profs.any((p) => p.contains(query));
       }
 
-      return matchesCategory && matchesFavorites && matchesSearch;
+      // Filtre Disponibilité
+      bool matchesAvailability =
+          !providerListProvider.filterOnlyAvailable || provider.isAvailable;
+
+      return matchesCategory &&
+          matchesFavorites &&
+          matchesSearch &&
+          matchesAvailability;
     }).toList();
 
     // Tri

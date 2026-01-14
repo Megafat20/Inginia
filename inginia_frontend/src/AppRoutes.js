@@ -16,6 +16,7 @@ import PrivateRoute from "./Components/PrivateRoute";
 import AdminDashboard from "./Components/AdminDashboard";
 import AdminDashboardNew from "./Components/Admin/AdminDashboardNew";
 import ProviderValidation from "./Components/Admin/ProviderValidation";
+import UserManagement from "./Components/Admin/UserManagement";
 import AdminTracking from "./Components/AdminTracking";
 import ProviderDashboard from "./Components/Providers/ProviderDashboard";
 import ProviderProfile from "./Components/Providers/ProviderProfile";
@@ -72,7 +73,7 @@ const AppRoutes = () => {
             path="/admin/users"
             element={
               <PrivateRoute role="admin">
-                <AdminDashboard />
+                <UserManagement />
               </PrivateRoute>
             }
           />
