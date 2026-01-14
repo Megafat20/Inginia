@@ -203,4 +203,265 @@ class AdminController extends Controller
             'message' => 'Utilisateur supprimé avec succès'
         ]);
     }
+
+    /**
+     * 💰 Vue d'ensemble des portefeuilles (Admin Dashboard)
+     */
+    public function getWalletOverview()
+    {
+        $stats = [
+            'total_balance' => \App\Models\User::where('role', 'prestataire')->sum('balance'),
+            'total_commissions' => \App\Models\Transaction::where('type', 'debit')
+                ->where('payment_method', 'system')
+                ->where('status', 'completed')
+                ->sum('amount'),
+            'pending_commissions' => \App\Models\Transaction::where('type', 'debit')
+                ->where('status', 'pending')
+                ->sum('amount'),
+            'total_recharges' => \App\Models\Transaction::where('type', 'credit')
+                ->where('status', 'completed')
+                ->sum('amount'),
+            'providers_with_balance' => \App\Models\User::where('role', 'prestataire')
+                ->where('balance', '>', 0)
+                ->count(),
+            'providers_negative_balance' => \App\Models\User::where('role', 'prestataire')
+                ->where('balance', '<', 0)
+                ->count(),
+        ];
+
+        return response()->json($stats);
+    }
+
+    /**
+     * 📊 Toutes les transactions (avec filtres)
+     */
+    public function getAllTransactions(Request $request)
+    {
+        $query = \App\Models\Transaction::with('user:id,name,email,phone')
+            ->latest();
+
+        // Filtres optionnels
+        if ($request->has('type')) {
+            $query->where('type', $request->type);
+        }
+
+        if ($request->has('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->has('user_id')) {
+            $query->where('user_id', $request->user_id);
+        }
+
+        $transactions = $query->paginate(50);
+
+        return response()->json($transactions);
+    }
+
+    /**
+     * 👤 Portefeuille d'un prestataire spécifique
+     */
+    public function getProviderWallet($id)
+    {
+        $provider = User::where('id', $id)
+            ->where('role', 'prestataire')
+            ->firstOrFail();
+
+        $transactions = \App\Models\Transaction::where('user_id', $provider->id)
+            ->latest()
+            ->get();
+
+        $stats = [
+            'balance' => $provider->balance,
+            'total_credits' => $transactions->where('type', 'credit')->sum('amount'),
+            'total_debits' => $transactions->where('type', 'debit')->sum('amount'),
+            'pending_debits' => $transactions->where('type', 'debit')
+                ->where('status', 'pending')
+                ->sum('amount'),
+        ];
+
+        return response()->json([
+            'provider' => [
+                'id' => $provider->id,
+                'name' => $provider->name,
+                'email' => $provider->email,
+                'phone' => $provider->phone,
+            ],
+            'stats' => $stats,
+            'transactions' => $transactions,
+        ]);
+    }
+
+    /**
+     * ⚙️ Ajustement manuel du solde (Admin uniquement)
+     */
+    public function adjustBalance(Request $request, $userId)
+    {
+        $request->validate([
+            'amount' => 'required|numeric',
+            'type' => 'required|in:credit,debit',
+            'reason' => 'required|string|max:500',
+        ]);
+
+        $user = User::findOrFail($userId);
+        $amount = abs($request->amount);
+
+        \Illuminate\Support\Facades\DB::beginTransaction();
+
+        try {
+            // Ajuster le solde
+            if ($request->type === 'credit') {
+                $user->balance += $amount;
+            } else {
+                $user->balance -= $amount;
+            }
+            $user->save();
+
+            // Créer la transaction
+            \App\Models\Transaction::create([
+                'user_id' => $user->id,
+                'type' => $request->type,
+                'amount' => $amount,
+                'status' => 'completed',
+                'payment_method' => 'admin_adjustment',
+                'reference' => 'ADJ_' . time(),
+                'description' => "Ajustement Admin: " . $request->reason,
+            ]);
+
+            \Illuminate\Support\Facades\DB::commit();
+
+            return response()->json([
+                'message' => 'Solde ajusté avec succès',
+                'new_balance' => $user->balance,
+            ]);
+
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\DB::rollBack();
+            return response()->json(['error' => 'Erreur lors de l\'ajustement'], 500);
+        }
+    }
+
+    /**
+     * 📈 Statistiques des commissions
+     */
+    public function getCommissionStats(Request $request)
+    {
+        $period = $request->get('period', 'month'); // day, week, month, year
+
+        $dateFilter = match($period) {
+            'day' => now()->startOfDay(),
+            'week' => now()->startOfWeek(),
+            'month' => now()->startOfMonth(),
+            'year' => now()->startOfYear(),
+            default => now()->startOfMonth(),
+        };
+
+        $commissions = \App\Models\Transaction::where('type', 'debit')
+            ->where('payment_method', 'system')
+            ->where('created_at', '>=', $dateFilter)
+            ->get();
+
+        $stats = [
+            'period' => $period,
+            'total_commissions' => $commissions->where('status', 'completed')->sum('amount'),
+            'pending_commissions' => $commissions->where('status', 'pending')->sum('amount'),
+            'transaction_count' => $commissions->where('status', 'completed')->count(),
+            'average_commission' => $commissions->where('status', 'completed')->avg('amount'),
+            'top_providers' => \App\Models\Transaction::where('type', 'debit')
+                ->where('payment_method', 'system')
+                ->where('status', 'completed')
+                ->where('created_at', '>=', $dateFilter)
+                ->select('user_id', \Illuminate\Support\Facades\DB::raw('SUM(amount) as total'))
+                ->groupBy('user_id')
+                ->orderBy('total', 'desc')
+                ->limit(10)
+                ->with('user:id,name,email')
+                ->get(),
+        ];
+
+        return response()->json($stats);
+    }
+
+    /**
+     * 💰 Retrait des commissions par l'admin (vers compte Nita)
+     */
+    public function collectCommissions(Request $request)
+    {
+        $request->validate([
+            'amount' => 'required|numeric|min:1000',
+            'payment_method' => 'required|in:nita,orange,airtel',
+            'account_number' => 'required|string',
+        ]);
+
+        $amount = (float) $request->amount;
+
+        // Calculer le total des commissions disponibles
+        $totalCommissions = \App\Models\Transaction::where('type', 'debit')
+            ->where('payment_method', 'system')
+            ->where('status', 'completed')
+            ->sum('amount');
+
+        // Calculer ce qui a déjà été retiré
+        $alreadyCollected = \App\Models\Transaction::where('type', 'debit')
+            ->where('payment_method', 'admin_collection')
+            ->where('status', 'completed')
+            ->sum('amount');
+
+        $availableCommissions = $totalCommissions - $alreadyCollected;
+
+        if ($amount > $availableCommissions) {
+            return response()->json([
+                'error' => 'Montant supérieur aux commissions disponibles',
+                'available' => $availableCommissions,
+                'requested' => $amount
+            ], 400);
+        }
+
+        try {
+            // Créer une transaction de collecte admin
+            $collection = \App\Models\Transaction::create([
+                'user_id' => auth()->id(), // Admin user
+                'type' => 'debit',
+                'amount' => $amount,
+                'payment_method' => 'admin_collection',
+                'status' => 'completed',
+                'reference' => strtoupper(uniqid('COLLECT_')),
+                'description' => "Retrait commissions Inginia vers " . strtoupper($request->payment_method) . " (" . $request->account_number . ")",
+            ]);
+
+            return response()->json([
+                'message' => 'Collecte de commissions enregistrée',
+                'collection' => $collection,
+                'remaining_commissions' => $availableCommissions - $amount
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Erreur lors de la collecte'], 500);
+        }
+    }
+
+    /**
+     * 📊 Historique des collectes de commissions
+     */
+    public function getCollectionHistory()
+    {
+        $collections = \App\Models\Transaction::where('payment_method', 'admin_collection')
+            ->where('status', 'completed')
+            ->latest()
+            ->get();
+
+        $totalCollected = $collections->sum('amount');
+
+        $totalCommissions = \App\Models\Transaction::where('type', 'debit')
+            ->where('payment_method', 'system')
+            ->where('status', 'completed')
+            ->sum('amount');
+
+        return response()->json([
+            'collections' => $collections,
+            'total_collected' => $totalCollected,
+            'total_commissions' => $totalCommissions,
+            'available_to_collect' => $totalCommissions - $totalCollected
+        ]);
+    }
 }

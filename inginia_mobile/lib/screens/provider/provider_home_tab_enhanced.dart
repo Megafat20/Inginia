@@ -207,10 +207,22 @@ class _ProviderHomeTabEnhancedState extends State<ProviderHomeTabEnhanced> {
                     FutureBuilder<Map<String, dynamic>>(
                       future: _futureStats,
                       builder: (context, snapshot) {
-                        final stats = snapshot.data ?? {};
-                        final rating = stats['avg_rating']?.toString() ?? '0.0';
+                        final data = snapshot.data ?? {};
+                        final profile = data['profile'] ?? {};
+                        final backendStats = data['stats'] ?? {};
+
+                        final rawRating = profile['note'];
+                        final rating = rawRating != null
+                            ? double.tryParse(
+                                    rawRating.toString(),
+                                  )?.toStringAsFixed(1) ??
+                                  '0.0'
+                            : '0.0';
+
+                        // Use completedReservations for "Missions" count (experience)
                         final totalJobs =
-                            stats['total_jobs']?.toString() ?? '0';
+                            backendStats['completedReservations']?.toString() ??
+                            '0';
 
                         return Row(
                           children: [
@@ -255,7 +267,8 @@ class _ProviderHomeTabEnhancedState extends State<ProviderHomeTabEnhanced> {
                       .where((r) => r.status == 'pending')
                       .length;
                   final accepted = reservations
-                      .where((r) => r.status == 'accepted')
+                      .where((r) => r.status == 'accepted' ||
+                          r.status == 'in_progress')
                       .length;
                   final completed = reservations
                       .where((r) => r.status == 'completed')

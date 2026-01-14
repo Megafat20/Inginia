@@ -5,6 +5,8 @@ import '../../services/admin_service.dart';
 import '../../providers/auth_provider.dart';
 import 'provider_validation_screen.dart';
 import 'users_management_screen.dart';
+import 'admin_commissions_screen.dart';
+import 'admin_providers_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -253,6 +255,42 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                     MaterialPageRoute(
                                       builder: (context) =>
                                           UsersManagementScreen(),
+                                    ),
+                                  );
+                                },
+                              ),
+
+                              SizedBox(height: 12),
+
+                              _buildActionCard(
+                                'Gestion Commissions',
+                                'Décaisser et gérer les commissions',
+                                Icons.account_balance_wallet_rounded,
+                                Colors.green,
+                                () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          AdminCommissionsScreen(),
+                                    ),
+                                  );
+                                },
+                              ),
+
+                              SizedBox(height: 12),
+
+                              _buildActionCard(
+                                'Tous les Prestataires',
+                                'Rechercher et gérer les prestataires',
+                                Icons.people_alt_rounded,
+                                Colors.purple,
+                                () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          AdminProvidersScreen(),
                                     ),
                                   );
                                 },

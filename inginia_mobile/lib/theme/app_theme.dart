@@ -127,6 +127,7 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
+      scaffoldBackgroundColor: bgDark,
       colorScheme: ColorScheme.fromSeed(
         seedColor: primary,
         brightness: Brightness.dark,
@@ -135,20 +136,28 @@ class AppTheme {
         background: bgDark,
         error: const Color(0xFFEF4444),
       ),
-      textTheme: GoogleFonts.interTextTheme().copyWith(
-        displayLarge: GoogleFonts.outfit(
-          fontSize: 32,
-          fontWeight: FontWeight.bold,
-          color: textDarkPrimary,
-        ),
-        displayMedium: GoogleFonts.outfit(
-          fontSize: 24,
-          fontWeight: FontWeight.bold,
-          color: textDarkPrimary,
-        ),
-        bodyLarge: GoogleFonts.inter(fontSize: 16, color: textDarkPrimary),
-        bodyMedium: GoogleFonts.inter(fontSize: 14, color: textDarkSecondary),
-      ),
+
+      // 📝 Typographie Dark Mode
+      textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme)
+          .copyWith(
+            displayLarge: GoogleFonts.outfit(
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+              color: textDarkPrimary,
+            ),
+            displayMedium: GoogleFonts.outfit(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: textDarkPrimary,
+            ),
+            bodyLarge: GoogleFonts.inter(fontSize: 16, color: textDarkPrimary),
+            bodyMedium: GoogleFonts.inter(
+              fontSize: 14,
+              color: textDarkSecondary,
+            ),
+          ),
+
+      // 🔘 Boutons Dark Mode
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: primary,
@@ -161,18 +170,71 @@ class AppTheme {
           textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
         ),
       ),
+
+      // 📱 AppBar Dark Mode
       appBarTheme: const AppBarTheme(
-        backgroundColor: bgDark,
+        backgroundColor: surfaceDark,
         foregroundColor: textDarkPrimary,
         elevation: 0,
         centerTitle: true,
+        iconTheme: IconThemeData(color: textDarkPrimary),
       ),
+
+      // ⌨️ Input Dark Mode (CRITIQUE pour la visibilité)
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: const Color(0xFF1E293B),
+        fillColor: const Color(0xFF1E293B), // Fond sombre
+        labelStyle: const TextStyle(
+          color: textDarkSecondary,
+        ), // Labels visibles
+        hintStyle: const TextStyle(color: Color(0xFF64748B)), // Hints visibles
+        prefixIconColor: textDarkSecondary,
+        suffixIconColor: textDarkSecondary,
+
+        // Texte dans les inputs sera BLANC (défini par textTheme)
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
+          borderSide: const BorderSide(color: Color(0xFF334155), width: 1),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: Color(0xFF334155), width: 1),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: primary, width: 2),
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 16,
+        ),
+      ),
+
+      // 📦 Cartes Dark Mode
+      cardTheme: const CardThemeData(
+        color: surfaceDark,
+        elevation: 4,
+        shadowColor: Colors.black45,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(20)),
+        ),
+        margin: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      ),
+
+      // 🎨 Icônes Dark Mode
+      iconTheme: const IconThemeData(color: textDarkPrimary, size: 24),
+
+      // 🎭 Dialog Dark Mode
+      dialogTheme: DialogThemeData(
+        backgroundColor: surfaceDark,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+
+      // 📋 Bottom Sheet Dark Mode
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: surfaceDark,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
       ),
     );

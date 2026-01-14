@@ -112,6 +112,10 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/reports', [\App\Http\Controllers\Api\ReportController::class, 'store']);
 
 
+    // Wallet / Portefeuille
+    Route::get('/wallet', [\App\Http\Controllers\WalletController::class, 'index']);
+    Route::post('/wallet/recharge', [\App\Http\Controllers\WalletController::class, 'recharge']);
+
     // Admin Tracking
     Route::get('/admin/reservations/ongoing', [ReservationController::class, 'getOngoingReservations']);
     
@@ -125,6 +129,17 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/users', [\App\Http\Controllers\AdminController::class, 'getAllUsers']);
         Route::put('/users/{id}', [\App\Http\Controllers\AdminController::class, 'updateUser']);
         Route::delete('/users/{id}', [\App\Http\Controllers\AdminController::class, 'deleteUser']);
+        
+        // 💰 Gestion des Portefeuilles & Commissions
+        Route::get('/wallet/overview', [\App\Http\Controllers\AdminController::class, 'getWalletOverview']);
+        Route::get('/transactions', [\App\Http\Controllers\AdminController::class, 'getAllTransactions']);
+        Route::get('/wallet/provider/{id}', [\App\Http\Controllers\AdminController::class, 'getProviderWallet']);
+        Route::post('/wallet/adjust/{userId}', [\App\Http\Controllers\AdminController::class, 'adjustBalance']);
+        Route::get('/commissions/stats', [\App\Http\Controllers\AdminController::class, 'getCommissionStats']);
+        
+        // 💸 Collecte des Commissions par l'Admin
+        Route::post('/commissions/collect', [\App\Http\Controllers\AdminController::class, 'collectCommissions']);
+        Route::get('/commissions/history', [\App\Http\Controllers\AdminController::class, 'getCollectionHistory']);
     });
 });     // Profil prestataire
 Route::get('/professions/populaires', [ProviderController::class, 'popularProfessions']);

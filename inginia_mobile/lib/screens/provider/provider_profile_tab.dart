@@ -6,6 +6,7 @@ import '../../repositories/provider_repository.dart';
 import '../../models/user_model.dart';
 import 'provider_planning_screen.dart';
 import 'portfolio_management_screen.dart';
+import 'provider_wallet_screen.dart';
 
 class ProviderProfileTab extends StatefulWidget {
   const ProviderProfileTab({super.key});
@@ -455,6 +456,29 @@ class _ProviderProfileTabState extends State<ProviderProfileTab> {
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.orange.shade700,
                   side: BorderSide(color: Colors.orange.shade700, width: 1.5),
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ProviderWalletScreen(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.account_balance_wallet_rounded),
+                label: const Text("Mon Portefeuille"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primary,
+                  foregroundColor: Colors.white,
                   minimumSize: const Size(double.infinity, 50),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(15),

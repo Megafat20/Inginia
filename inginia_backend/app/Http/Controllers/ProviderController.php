@@ -151,7 +151,7 @@ class ProviderController extends Controller
         $servicesCount = $user->competances()->count();
         $reservationsCount = $user->receivedReservations()->count();
         $completedReservations = $user->receivedReservations()
-            ->where('status', 'completed')
+            ->whereIn('status', ['completed', 'in_progress'])
             ->count();
 
         return response()->json([

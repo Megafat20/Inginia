@@ -110,6 +110,11 @@ class ReservationController extends Controller
         $reservation->status = $newStatus;
         $reservation->save();
 
+        // 💰 Déduction automatique de commission si mission terminée
+        if ($newStatus === 'completed') {
+            $this->deductCommission($reservation);
+        }
+
         broadcast(new ReservationStatusUpdated($reservation))->toOthers();
 
         if ($newStatus === 'accepted') {
@@ -127,6 +132,57 @@ class ReservationController extends Controller
         return response()->json([
             'message' => 'Statut mis à jour avec succès',
             'reservation' => $reservation,
+        ]);
+    }
+
+    /**
+     * Déduit la commission Inginia du solde du prestataire
+     */
+    private function deductCommission($reservation)
+    {
+        $provider = $reservation->provider;
+        
+        // 📊 Calcul de la commission (5% du prix du service ou 200 FCFA minimum)
+        $servicePrice = $reservation->competance->price ?? 4000; // Prix par défaut si non défini
+        $commissionRate = 0.05; // 5%
+        $commission = max(200, $servicePrice * $commissionRate); // Minimum 200 FCFA
+
+        // ⚠️ Vérifier si le prestataire a assez de solde
+        if ($provider->balance < $commission) {
+            // 🚫 SOLDE INSUFFISANT : Bloquer le prestataire
+            $provider->is_available = false; // Plus de nouvelles missions
+            $provider->save();
+
+            // Créer la transaction en "pending" (dette)
+            \App\Models\Transaction::create([
+                'user_id' => $provider->id,
+                'type' => 'debit',
+                'amount' => $commission,
+                'status' => 'pending',
+                'payment_method' => 'system',
+                'reference' => 'COMM_' . $reservation->id,
+                'description' => "Commission Inginia - Mission #{$reservation->id} (⚠️ SOLDE INSUFFISANT - Compte bloqué)",
+            ]);
+
+            // 🔔 TODO: Notifier le prestataire
+            // "Votre compte est bloqué. Rechargez pour continuer à recevoir des missions."
+            
+            return;
+        }
+
+        // ✅ Solde suffisant : Déduction normale
+        $provider->balance -= $commission;
+        $provider->save();
+
+        // 📝 Enregistrement de la transaction
+        \App\Models\Transaction::create([
+            'user_id' => $provider->id,
+            'type' => 'debit',
+            'amount' => $commission,
+            'status' => 'completed',
+            'payment_method' => 'system',
+            'reference' => 'COMM_' . $reservation->id,
+            'description' => "Commission Inginia - Mission #{$reservation->id}",
         ]);
     }
 
