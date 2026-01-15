@@ -9,7 +9,7 @@ class Profession extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'description'];
+    protected $fillable = ['name', 'icon'];
 
     public function prestataires()
 {

@@ -59,8 +59,7 @@ class AuthController extends Controller
                 
                 // Trouver ou créer la profession
                 $profession = \App\Models\Profession::firstOrCreate(
-                    ['name' => $cleanName],
-                    ['description' => 'Ajouté par utilisateur'] // Optionnel
+                    ['name' => $cleanName]
                 );
                 
                 $customIds[] = $profession->id;
