@@ -168,19 +168,100 @@ class UserController extends Controller
     }
 
     // Récupérer uniquement les prestataires et services pour l'interface client
-    public function getProvidersAndServices()
+    public function getProvidersAndServices(Request $request)
     {
         $user = auth()->user();
-        $users = User::whereIn('role', ['prestataire', 'service'])
-            ->with('professions') // si tu veux inclure les professions
-            ->get()
-            ->map(function ($provider) use ($user) {
-                $provider->favorited = $user->favorites()->where('provider_id', $provider->id)->exists();
-
-                return $provider;
+        $query = User::whereIn('role', ['prestataire', 'service'])
+            ->where('is_available', true)
+            ->where(function($q) {
+                $q->where('role', '!=', 'prestataire')
+                  ->orWhere('balance', '>', 0);
             });
 
-        return response()->json($users);
+        // 🔍 Recherche par nom ou profession
+        if ($request->filled('q')) {
+            $search = $request->q;
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%$search%")
+                  ->orWhere('slogan', 'like', "%$search%")
+                  ->orWhereHas('professions', function ($qp) use ($search) {
+                      $qp->where('name', 'like', "%$search%");
+                  });
+            });
+        }
+
+        // 🏷️ Filtre par profession
+        if ($request->filled('profession_id')) {
+            $query->whereHas('professions', function ($q) use ($request) {
+                $q->where('professions.id', $request->profession_id);
+            });
+        }
+
+        // 💰 Filtre par prix
+        if ($request->filled('min_price')) {
+            $query->where('min_price', '>=', $request->min_price);
+        }
+        if ($request->filled('max_price')) {
+            $query->where('min_price', '<=', $request->max_price);
+        }
+
+        // ⭐ Filtre par note
+        if ($request->filled('min_rating')) {
+            $query->whereHas('reviewsReceived', function ($q) use ($request) {
+                $q->havingRaw('AVG(note) >= ?', [$request->min_rating]);
+            }, '>=', 1);
+        }
+
+        // 🟢 Filtre disponibilité
+        if ($request->boolean('available')) {
+            $query->where('is_available', true);
+        }
+
+        // 🗺️ Filtre par distance (Géolocalisation)
+        if ($request->filled(['latitude', 'longitude'])) {
+            $lat = $request->latitude;
+            $lng = $request->longitude;
+            $query->avecDistance($lat, $lng);
+            
+            if ($request->filled('radius')) {
+                $query->having('distance', '<=', $request->radius);
+            }
+        }
+
+        // ↕️ Tri
+        $sort = $request->input('sort', 'default');
+        switch ($sort) {
+            case 'price_asc':
+                $query->orderBy('min_price', 'asc');
+                break;
+            case 'price_desc':
+                $query->orderBy('min_price', 'desc');
+                break;
+            case 'rating_desc':
+                $query->withAvg('reviewsReceived', 'note')
+                      ->orderByDesc('reviews_received_avg_note');
+                break;
+            case 'distance_asc':
+                // Handled by avecDistance scope if lat/lng present
+                break;
+            default:
+                $query->latest();
+                break;
+        }
+
+        $perPage = $request->input('per_page', 15);
+        $providers = $query->with(['professions', 'competances'])
+                           ->withAvg('reviewsReceived', 'note')
+                           ->paginate($perPage);
+
+        // Ajouter info "favorited" pour l'utilisateur actuel
+        $providers->getCollection()->transform(function ($provider) use ($user) {
+            $provider->favorited = $user ? $user->favorites()->where('provider_id', $provider->id)->exists() : false;
+            $provider->avg_rating = (float)($provider->reviews_received_avg_note ?? 0);
+            return $provider;
+        });
+
+        return response()->json($providers);
     }
 
     public function updateFcmToken(Request $request)

@@ -16,12 +16,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/pending_validation_screen.dart';
 import 'providers/theme_provider.dart';
+import 'package:flutter/foundation.dart'; // Added for defaultTargetPlatform
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize Firebase
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  if (defaultTargetPlatform == TargetPlatform.android) {
+    await Firebase.initializeApp();
+  } else {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  }
 
   // Set up background message handler
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
@@ -49,7 +56,11 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthProvider()..checkAuth()),
+        ChangeNotifierProvider(
+          create: (_) => AuthProvider()
+            ..setHasSeenOnboarding(hasSeenOnboarding)
+            ..checkAuth(),
+        ),
         ChangeNotifierProvider(create: (_) => ProviderListProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
@@ -59,10 +70,19 @@ class MyApp extends StatelessWidget {
             title: 'Inginia Mobile',
             navigatorKey: MyApp.navigatorKey,
             debugShowCheckedModeBanner: false,
+            showSemanticsDebugger: false,
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,
             themeMode: themeProvider.themeMode,
-            home: AuthWrapper(hasSeenOnboarding: hasSeenOnboarding),
+            home: const AuthWrapper(),
+            builder: (context, child) {
+              return MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  accessibleNavigation: false,
+                ),
+                child: child!,
+              );
+            },
           );
         },
       ),
@@ -71,8 +91,7 @@ class MyApp extends StatelessWidget {
 }
 
 class AuthWrapper extends StatelessWidget {
-  final bool hasSeenOnboarding;
-  const AuthWrapper({super.key, required this.hasSeenOnboarding});
+  const AuthWrapper({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -82,7 +101,7 @@ class AuthWrapper extends StatelessWidget {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    if (!hasSeenOnboarding) {
+    if (!authProvider.hasSeenOnboarding) {
       return const OnboardingScreen();
     }
 

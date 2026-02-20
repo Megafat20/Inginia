@@ -32,7 +32,7 @@ class ReservationStatusUpdated implements ShouldBroadcast
     public function broadcastOn(): array
     {
         return [
-            new PrivateChannel('private-reservation.' . $this->reservation->id),
+            new PrivateChannel('reservation.' . $this->reservation->id),
         ];
     }
 

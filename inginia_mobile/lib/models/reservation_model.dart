@@ -14,10 +14,13 @@ class Reservation {
   final String? providerPhone;
   final String? clientName;
   final String? clientPhoto;
+  final String? clientPhone;
   final double? clientLat;
   final double? clientLng;
   final double? providerLat;
   final double? providerLng;
+  final List<String> photosBefore;
+  final List<String> photosAfter;
 
   Reservation({
     required this.id,
@@ -33,10 +36,13 @@ class Reservation {
     this.providerPhone,
     this.clientName,
     this.clientPhoto,
+    this.clientPhone,
     this.clientLat,
     this.clientLng,
     this.providerLat,
     this.providerLng,
+    this.photosBefore = const [],
+    this.photosAfter = const [],
   });
 
   String get eta {
@@ -82,6 +88,7 @@ class Reservation {
       providerPhone: provider['phone'],
       clientName: client['name'] ?? 'Client Inconnu',
       clientPhoto: client['profile_photo_url'],
+      clientPhone: client['phone'],
       serviceTitle: competance['title'] ?? 'Service personnalisé',
       price: competance['price'] != null
           ? (double.tryParse(competance['price'].toString())?.toInt())
@@ -98,6 +105,12 @@ class Reservation {
       providerLng: json['provider_lng'] != null
           ? double.tryParse(json['provider_lng'].toString())
           : null,
+      photosBefore:
+          (json['photos_before'] as List?)?.map((e) => e.toString()).toList() ??
+          [],
+      photosAfter:
+          (json['photos_after'] as List?)?.map((e) => e.toString()).toList() ??
+          [],
     );
   }
 }

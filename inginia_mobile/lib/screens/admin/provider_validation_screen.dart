@@ -33,8 +33,8 @@ class _ProviderValidationScreenState extends State<ProviderValidationScreen>
   }
 
   Future<void> _loadData() async {
+    setState(() => _loading = true);
     try {
-      setState(() => _loading = true);
       final pending = await _adminService.getPendingProviders();
       final validated = await _adminService.getValidatedProviders();
       setState(() {
@@ -45,72 +45,168 @@ class _ProviderValidationScreenState extends State<ProviderValidationScreen>
     } catch (e) {
       setState(() => _loading = false);
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Erreur: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+        );
       }
     }
   }
 
   Future<void> _validateProvider(int providerId) async {
+    final commentController = TextEditingController();
+    DateTime? selectedDate;
+
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Confirmer la validation'),
-        content: Text('Voulez-vous valider ce prestataire ?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Annuler'),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            child: Text('Valider'),
+          title: const Text(
+            'Valider le dossier',
+            style: TextStyle(fontWeight: FontWeight.w900),
           ),
-        ],
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Définir les conditions de validation pour ce prestataire.',
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: commentController,
+                decoration: InputDecoration(
+                  labelText: 'Commentaire / Justification',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  prefixIcon: const Icon(Icons.comment_outlined),
+                ),
+                maxLines: 2,
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text(
+                  'Date d\'expiration',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                ),
+                subtitle: Text(
+                  selectedDate == null
+                      ? 'Non définie (Permanent)'
+                      : '${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}',
+                ),
+                trailing: const Icon(Icons.calendar_today_rounded),
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: DateTime.now().add(const Duration(days: 365)),
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime.now().add(const Duration(days: 3650)),
+                  );
+                  if (picked != null) {
+                    setDialogState(() => selectedDate = picked);
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Annuler'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text('Valider'),
+            ),
+          ],
+        ),
       ),
     );
 
     if (confirm != true) return;
 
     try {
-      await _adminService.validateProvider(providerId);
+      await _adminService.validateProvider(
+        providerId,
+        comment: commentController.text,
+        expiresAt: selectedDate?.toIso8601String(),
+      );
+      _loadData();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Prestataire validé avec succès !'),
+          const SnackBar(
+            content: Text('Prestataire validé !'),
             backgroundColor: Colors.green,
           ),
         );
       }
-      await _loadData();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Erreur: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+        );
       }
     }
   }
 
   Future<void> _rejectProvider(int providerId) async {
+    final commentController = TextEditingController();
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Confirmer le rejet'),
-        content: Text(
-          'Voulez-vous rejeter et supprimer ce prestataire ? Cette action est irréversible.',
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text(
+          'Rejeter la demande',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Veuillez justifier le rejet. Le prestataire recevra ce motif par email.',
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: commentController,
+              decoration: InputDecoration(
+                labelText: 'Motif du rejet',
+                errorText: 'Requis pour le rejet',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                prefixIcon: const Icon(Icons.error_outline),
+              ),
+              maxLines: 3,
+            ),
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('Annuler'),
+            child: const Text('Annuler'),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: Text('Rejeter'),
+            onPressed: () {
+              if (commentController.text.isEmpty) return;
+              Navigator.pop(context, true);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text('Confirmer le Rejet'),
           ),
         ],
       ),
@@ -119,21 +215,24 @@ class _ProviderValidationScreenState extends State<ProviderValidationScreen>
     if (confirm != true) return;
 
     try {
-      await _adminService.rejectProvider(providerId);
+      await _adminService.rejectProvider(
+        providerId,
+        comment: commentController.text,
+      );
+      _loadData();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text('Prestataire rejeté'),
-            backgroundColor: Colors.red,
+            backgroundColor: Colors.orange,
           ),
         );
       }
-      await _loadData();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Erreur: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+        );
       }
     }
   }
@@ -143,254 +242,437 @@ class _ProviderValidationScreenState extends State<ProviderValidationScreen>
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: Text('Validation Prestataires'),
-        elevation: 0,
-        backgroundColor: AppTheme.primary,
+        title: const Text(
+          'Qualité & Docs',
+          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 24),
+        ),
+        centerTitle: false,
+        actions: [
+          IconButton(
+            onPressed: _loadData,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: Colors.white,
+          labelColor: AppTheme.primary,
+          unselectedLabelColor: Colors.grey,
+          indicatorColor: AppTheme.primary,
+          indicatorWeight: 4,
+          indicatorPadding: const EdgeInsets.symmetric(horizontal: 40),
+          labelStyle: const TextStyle(
+            fontWeight: FontWeight.w900,
+            fontSize: 13,
+          ),
           tabs: [
-            Tab(text: 'En Attente (${_pendingProviders.length})'),
-            Tab(text: 'Validés (${_validatedProviders.length})'),
+            Tab(text: 'EN ATTENTE (${_pendingProviders.length})'),
+            Tab(text: 'VALIDÉS (${_validatedProviders.length})'),
           ],
         ),
       ),
       body: _loading
-          ? Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadData,
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  // Pending Tab
-                  _pendingProviders.isEmpty
-                      ? _buildEmptyState(
-                          'Aucune demande en attente',
-                          Icons.check_circle_outline,
-                        )
-                      : ListView.builder(
-                          padding: EdgeInsets.all(16),
-                          itemCount: _pendingProviders.length,
-                          itemBuilder: (context, index) {
-                            final provider = _pendingProviders[index];
-                            return _buildProviderCard(provider, true);
-                          },
-                        ),
-
-                  // Validated Tab
-                  _validatedProviders.isEmpty
-                      ? _buildEmptyState(
-                          'Aucun prestataire validé',
-                          Icons.info_outline,
-                        )
-                      : ListView.builder(
-                          padding: EdgeInsets.all(16),
-                          itemCount: _validatedProviders.length,
-                          itemBuilder: (context, index) {
-                            final provider = _validatedProviders[index];
-                            return _buildProviderCard(provider, false);
-                          },
-                        ),
-                ],
-              ),
+          ? const Center(child: CircularProgressIndicator())
+          : TabBarView(
+              controller: _tabController,
+              children: [
+                _buildProviderList(_pendingProviders, true),
+                _buildProviderList(_validatedProviders, false),
+              ],
             ),
     );
   }
 
-  Widget _buildEmptyState(String message, IconData icon) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 80, color: Colors.grey.shade300),
-          SizedBox(height: 16),
-          Text(
-            message,
-            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-          ),
-        ],
+  Widget _buildProviderList(List<dynamic> providers, bool isPending) {
+    if (providers.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.verified_user_outlined,
+              size: 80,
+              color: Colors.grey.shade200,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              isPending
+                  ? 'Aucun dossier en attente'
+                  : 'Aucun prestataire validé',
+              style: TextStyle(
+                color: Colors.grey.shade400,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(20),
+        itemCount: providers.length,
+        itemBuilder: (context, index) =>
+            _buildProviderCard(providers[index], isPending),
       ),
     );
   }
 
-  Widget _buildProviderCard(dynamic provider, bool showActions) {
-    final isAgency = provider['is_agency'] == true;
+  Widget _buildProviderCard(dynamic provider, bool isPending) {
+    final portfolios = provider['portfolios'] as List<dynamic>? ?? [];
     final professions = provider['professions'] as List<dynamic>? ?? [];
 
-    return Card(
-      margin: EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      elevation: 2,
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Avatar
-                CircleAvatar(
-                  radius: 30,
-                  backgroundColor: AppTheme.primary.withOpacity(0.1),
-                  backgroundImage: provider['profile_photo'] != null
-                      ? NetworkImage(provider['profile_photo'])
-                      : null,
-                  child: provider['profile_photo'] == null
-                      ? Text(
-                          (provider['name'] ?? '?')[0].toUpperCase(),
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.primary,
-                          ),
-                        )
-                      : null,
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        provider['name'] ?? 'Sans nom',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textDark,
-                        ),
+                Row(
+                  children: [
+                    Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(16),
+                        image: provider['profile_photo'] != null
+                            ? DecorationImage(
+                                image: NetworkImage(provider['profile_photo']),
+                                fit: BoxFit.cover,
+                              )
+                            : null,
                       ),
-                      if (provider['service'] != null)
-                        Text(
-                          provider['service'],
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: AppTheme.primary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                if (isAgency)
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.purple.shade100,
-                      borderRadius: BorderRadius.circular(8),
+                      child: provider['profile_photo'] == null
+                          ? Icon(
+                              Icons.business_center_rounded,
+                              color: AppTheme.primary,
+                              size: 28,
+                            )
+                          : null,
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.business, size: 12, color: Colors.purple),
-                        SizedBox(width: 4),
-                        Text(
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            provider['name'] ?? 'Inconnu',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                              color: AppTheme.textDark,
+                            ),
+                          ),
+                          Text(
+                            provider['email'] ?? 'No Email',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (provider['is_agency'] == true)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.purple.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
                           'AGENCE',
                           style: TextStyle(
-                            fontSize: 10,
+                            fontSize: 9,
                             fontWeight: FontWeight.bold,
                             color: Colors.purple,
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                if (professions.isNotEmpty)
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: professions
+                        .map(
+                          (p) => Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              p['name'] ?? '',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue.shade700,
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
                   ),
-              ],
-            ),
-
-            SizedBox(height: 12),
-            Divider(),
-            SizedBox(height: 12),
-
-            // Info
-            _buildInfoRow(Icons.email, provider['email'] ?? ''),
-            if (provider['phone'] != null)
-              _buildInfoRow(Icons.phone, provider['phone']),
-            if (provider['location'] != null)
-              _buildInfoRow(Icons.location_on, provider['location']),
-
-            if (professions.isNotEmpty) ...[
-              SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: professions.map<Widget>((prof) {
-                  return Container(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(8),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.location_on_rounded,
+                      size: 14,
+                      color: AppTheme.textSecondary,
                     ),
-                    child: Text(
-                      prof['name'] ?? '',
+                    const SizedBox(width: 4),
+                    Text(
+                      provider['location'] ?? 'Non spécifié',
                       style: TextStyle(
                         fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade700,
+                        color: AppTheme.textSecondary,
                       ),
                     ),
-                  );
-                }).toList(),
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
+          ),
 
-            if (showActions) ...[
-              SizedBox(height: 16),
-              Divider(),
-              SizedBox(height: 12),
-              Row(
+          // Portfolio Preview Button
+          InkWell(
+            onTap: () => _showPortfolioPopup(provider, portfolios),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(24),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.folder_shared_rounded,
+                    color: AppTheme.primary,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Voir Documents & Portfolio',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: AppTheme.primary,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '${portfolios.length}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 12,
+                    color: AppTheme.primary,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          if (isPending) ...[
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
                 children: [
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () => _validateProvider(provider['id']),
-                      icon: Icon(Icons.check_circle, size: 20),
-                      label: Text('Valider'),
+                      icon: const Icon(Icons.check_circle_rounded, size: 18),
+                      label: const Text('Valider'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
                       ),
                     ),
                   ),
-                  SizedBox(width: 12),
-                  ElevatedButton(
+                  const SizedBox(width: 12),
+                  IconButton.filledTonal(
                     onPressed: () => _rejectProvider(provider['id']),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.shade50,
+                    icon: const Icon(Icons.close_rounded),
+                    style: IconButton.styleFrom(
                       foregroundColor: Colors.red,
-                      padding: EdgeInsets.all(12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      backgroundColor: Colors.red.shade50,
                     ),
-                    child: Icon(Icons.cancel, size: 24),
                   ),
                 ],
               ),
-            ],
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String text) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: Colors.grey.shade600),
-          SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+  void _showPortfolioPopup(dynamic provider, List<dynamic> portfolios) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.85,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        child: Column(
+          children: [
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
-          ),
-        ],
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Portfolio & Documents',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 24,
+                            color: AppTheme.textDark,
+                          ),
+                        ),
+                        Text(
+                          'Dossier de ${provider['name']}',
+                          style: TextStyle(color: AppTheme.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton.filledTonal(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: portfolios.isEmpty
+                  ? const Center(child: Text('Aucun document fourni'))
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      itemCount: portfolios.length,
+                      itemBuilder: (context, index) {
+                        final item = portfolios[index];
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 24),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.grey.shade200),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (item['image_url'] != null)
+                                ClipRRect(
+                                  borderRadius: const BorderRadius.vertical(
+                                    top: Radius.circular(20),
+                                  ),
+                                  child: Image.network(
+                                    item['image_url'],
+                                    width: double.infinity,
+                                    height: 200,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Container(
+                                      height: 100,
+                                      color: Colors.grey.shade200,
+                                      child: const Icon(
+                                        Icons.broken_image_rounded,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      item['title'] ?? 'Sans titre',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      item['description'] ??
+                                          'Aucune description',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

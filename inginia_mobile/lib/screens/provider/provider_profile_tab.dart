@@ -204,11 +204,11 @@ class _ProviderProfileTabState extends State<ProviderProfileTab> {
 
   @override
   Widget build(BuildContext context) {
-    final user = context.watch<AuthProvider>().user;
+   final user = context.select<AuthProvider, User?>((a) => a.user);
 
     if (user == null) return const Center(child: CircularProgressIndicator());
 
-    return Column(
+    return ListView(
       children: [
         // Header (Avatar + Name)
         Container(
@@ -335,9 +335,9 @@ class _ProviderProfileTabState extends State<ProviderProfileTab> {
         ),
 
         // Info List
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.all(20),
+        Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
             children: [
               _buildInfoTile(Icons.email_outlined, "Email", user.email),
               _buildInfoTile(
@@ -361,7 +361,9 @@ class _ProviderProfileTabState extends State<ProviderProfileTab> {
                   backgroundColor: AppTheme.secondary,
                   foregroundColor: Colors.white,
                   minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                  ),
                 ),
               ),
 

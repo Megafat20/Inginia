@@ -31,28 +31,33 @@ class SendMessageNotification
         
         if (!$reservation) return;
 
-        $sender = $message->sender;
+        $sender = $message->user;
         $recipient = $reservation->client_id === $message->sender_id 
             ? $reservation->provider 
             : $reservation->client;
 
-        if (!$recipient) return;
-
         $tokens = $recipient->deviceTokens()->where('revoked', false)->pluck('token')->toArray();
         if (empty($tokens)) return;
 
+        $body = $message->message;
+        if (empty($body)) {
+            if ($message->audio_url) {
+                $body = "🎙️ Note vocale";
+            } else if ($message->image_url) {
+                $body = "🖼️ Photo";
+            } else {
+                $body = "Nouveau message";
+            }
+        }
+
         try {
-            $this->fcm->sendToMultipleTokens(
-                $tokens,
-                "Message de " . ($sender->name ?? "Utilisateur"),
-                $message->message,
-                [
-                    'type' => 'chat',
-                    'reservation_id' => (string)$reservation->id,
-                    'sender_name' => $sender->name ?? "Utilisateur",
-                    'click_action' => 'FLUTTER_NOTIFICATION_CLICK'
-                ]
-            );
+            $this->fcm->sendToMultipleTokens($tokens, "💬 " . ($sender->name ?? "Utilisateur"), $body, [
+                'type' => 'new_message',
+                'reservation_id' => (string)$reservation->id,
+                'sender_id' => (string)$sender->id,
+                'sender_name' => $sender->name ?? "Utilisateur",
+                'screen' => 'chat',
+            ]);
         } catch (\Exception $e) {
             Log::error("FCM Error (MessageSent): " . $e->getMessage());
         }

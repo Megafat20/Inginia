@@ -3,6 +3,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
 import 'login_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -69,10 +71,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('has_seen_onboarding', true);
     if (mounted) {
-      Navigator.pushReplacement(
+      Provider.of<AuthProvider>(
         context,
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-      );
+        listen: false,
+      ).setHasSeenOnboarding(true);
     }
   }
 
@@ -108,70 +110,77 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               final page = _pages[index];
               return Padding(
                 padding: const EdgeInsets.all(40.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Spacer(),
-                    Image.asset(page.image, height: 300)
-                        .animate()
-                        .fadeIn(duration: 600.ms)
-                        .scale(
-                          begin: const Offset(0.8, 0.8),
-                          end: const Offset(1, 1),
-                          curve: Curves.easeOutBack,
-                        ),
-                    const SizedBox(height: 60),
-                    Text(
-                          page.title,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w900,
-                            color: AppTheme.textDark,
-                          ),
-                        )
-                        .animate(key: ValueKey('title_$index'))
-                        .fadeIn(delay: 200.ms)
-                        .slideY(begin: 0.2, end: 0),
-                    const SizedBox(height: 20),
-                    Text(
-                          page.description,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: AppTheme.textSecondary,
-                            height: 1.5,
-                          ),
-                        )
-                        .animate(key: ValueKey('desc_$index'))
-                        .fadeIn(delay: 400.ms)
-                        .slideY(begin: 0.2, end: 0),
-                    if (page.isConfig) ...[
-                      const SizedBox(height: 40),
-                      _buildPermissionTile(
-                            icon: Icons.location_on_rounded,
-                            title: "Position GPS",
-                            subtitle: "Pour vous localiser sur la carte",
-                            isGranted: _locationPermissionGranted,
-                            onTap: _requestLocation,
-                          )
-                          .animate()
-                          .fadeIn(delay: 600.ms)
-                          .slideY(begin: 0.2, end: 0),
-                      const SizedBox(height: 12),
-                      _buildPermissionTile(
-                            icon: Icons.notifications_active_rounded,
-                            title: "Notifications",
-                            subtitle: "Pour ne rater aucune mission",
-                            isGranted: _notificationPermissionGranted,
-                            onTap: _requestNotifications,
-                          )
-                          .animate()
-                          .fadeIn(delay: 800.ms)
-                          .slideY(begin: 0.2, end: 0),
-                    ],
-                    const Spacer(),
-                  ],
+                child: Center(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const SizedBox(height: 20),
+                        Image.asset(
+                              page.image,
+                              height: MediaQuery.of(context).size.height * 0.3,
+                            )
+                            .animate()
+                            .fadeIn(duration: 600.ms)
+                            .scale(
+                              begin: const Offset(0.8, 0.8),
+                              end: const Offset(1, 1),
+                              curve: Curves.easeOutBack,
+                            ),
+                        const SizedBox(height: 40),
+                        Text(
+                              page.title,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w900,
+                                color: AppTheme.textDark,
+                              ),
+                            )
+                            .animate(key: ValueKey('title_$index'))
+                            .fadeIn(delay: 200.ms)
+                            .slideY(begin: 0.2, end: 0),
+                        const SizedBox(height: 20),
+                        Text(
+                              page.description,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                color: AppTheme.textSecondary,
+                                height: 1.5,
+                              ),
+                            )
+                            .animate(key: ValueKey('desc_$index'))
+                            .fadeIn(delay: 400.ms)
+                            .slideY(begin: 0.2, end: 0),
+                        if (page.isConfig) ...[
+                          const SizedBox(height: 40),
+                          _buildPermissionTile(
+                                icon: Icons.location_on_rounded,
+                                title: "Position GPS",
+                                subtitle: "Pour vous localiser sur la carte",
+                                isGranted: _locationPermissionGranted,
+                                onTap: _requestLocation,
+                              )
+                              .animate()
+                              .fadeIn(delay: 600.ms)
+                              .slideY(begin: 0.2, end: 0),
+                          const SizedBox(height: 12),
+                          _buildPermissionTile(
+                                icon: Icons.notifications_active_rounded,
+                                title: "Notifications",
+                                subtitle: "Pour ne rater aucune mission",
+                                isGranted: _notificationPermissionGranted,
+                                onTap: _requestNotifications,
+                              )
+                              .animate()
+                              .fadeIn(delay: 800.ms)
+                              .slideY(begin: 0.2, end: 0),
+                        ],
+                        const SizedBox(height: 100), // Air for bottom controls
+                      ],
+                    ),
+                  ),
                 ),
               );
             },

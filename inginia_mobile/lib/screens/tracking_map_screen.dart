@@ -8,6 +8,9 @@ import '../services/websocket_service.dart';
 import '../theme/app_theme.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'dart:ui';
+import 'components/mission_details_modal.dart';
+import '../services/location_service.dart';
+import '../repositories/provider_repository.dart';
 
 class TrackingMapScreen extends StatefulWidget {
   final Reservation reservation;
@@ -32,6 +35,8 @@ class _TrackingMapScreenState extends State<TrackingMapScreen> {
   int? _durationMinutes;
   bool _isLoadingRoute = true;
   bool _isNear = false;
+  bool _isRefreshingLocation = false;
+  final _repository = ProviderRepository();
 
   @override
   void initState() {
@@ -49,28 +54,45 @@ class _TrackingMapScreenState extends State<TrackingMapScreen> {
 
     _fetchRoute();
 
-    // If client, listen to real-time updates from provider
-    if (!widget.isProvider) {
-      WebSocketService().listenToReservationUpdates(widget.reservation.id, (
-        data,
-      ) {
-        final event = data['_event'];
-        if (event == 'provider.moved' ||
-            (data['latitude'] != null && data['longitude'] != null)) {
-          if (!mounted) return;
-          setState(() {
-            _providerPos = LatLng(
-              (data['latitude'] as num).toDouble(),
-              (data['longitude'] as num).toDouble(),
-            );
-          });
-          _updateRoute();
-          // Don't auto-fit every time if the user is manually zooming,
-          // but fit if it's the first move or significantly different
-          _fitMap();
-        }
-      });
-    }
+    // Listen to real-time updates
+    WebSocketService().listenToReservationUpdates(widget.reservation.id, (
+      data,
+    ) {
+      if (!mounted) return;
+      final event = data['_event'];
+
+      // Provider moved (relevant for Client)
+      if (!widget.isProvider &&
+          (event == 'provider.moved' ||
+              (data['latitude'] != null &&
+                  data['longitude'] != null &&
+                  data['role'] == 'provider'))) {
+        setState(() {
+          _providerPos = LatLng(
+            (data['latitude'] as num).toDouble(),
+            (data['longitude'] as num).toDouble(),
+          );
+        });
+        _updateRoute();
+        _fitMap();
+      }
+
+      // Client moved (relevant for Provider)
+      if (widget.isProvider &&
+          (event == 'client.moved' ||
+              (data['latitude'] != null &&
+                  data['longitude'] != null &&
+                  data['role'] == 'client'))) {
+        setState(() {
+          _clientPos = LatLng(
+            (data['latitude'] as num).toDouble(),
+            (data['longitude'] as num).toDouble(),
+          );
+        });
+        _updateRoute();
+        _fitMap();
+      }
+    });
 
     // Auto-fit after a short delay
     Future.delayed(const Duration(milliseconds: 500), _fitMap);
@@ -151,6 +173,48 @@ class _TrackingMapScreenState extends State<TrackingMapScreen> {
     _fetchRoute();
   }
 
+  Future<void> _refreshUserLocation() async {
+    if (_isRefreshingLocation) return;
+    setState(() => _isRefreshingLocation = true);
+
+    try {
+      final pos = await LocationService().getCurrentLocation();
+      if (pos != null && mounted) {
+        final newLatLng = LatLng(pos.latitude, pos.longitude);
+
+        // Update local state based on role
+        setState(() {
+          if (widget.isProvider) {
+            _providerPos = newLatLng;
+          } else {
+            _clientPos = newLatLng;
+          }
+        });
+
+        // Sync with backend
+        await _repository.updateLocation(
+          widget.reservation.id,
+          pos.latitude,
+          pos.longitude,
+        );
+
+        _updateRoute();
+        _fitMap();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Position actualisée"),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      print("Error refreshing location: $e");
+    } finally {
+      if (mounted) setState(() => _isRefreshingLocation = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -160,7 +224,25 @@ class _TrackingMapScreenState extends State<TrackingMapScreen> {
         ),
         backgroundColor: Colors.white,
         foregroundColor: AppTheme.textDark,
-        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            onPressed: () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => MissionDetailsModal(
+                  reservation: widget.reservation,
+                  onUpdate: () {
+                    // Refresh if needed, though TrackingMap relies on WebSocket
+                    setState(() {});
+                  },
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: Stack(
         children: [
@@ -260,6 +342,38 @@ class _TrackingMapScreenState extends State<TrackingMapScreen> {
               ),
             ],
           ),
+
+          // Floating Refresh Button
+          Positioned(
+            top: 20,
+            right: 20,
+            child: Column(
+              children: [
+                FloatingActionButton.small(
+                  heroTag: "refresh_loc",
+                  onPressed: _refreshUserLocation,
+                  backgroundColor: Colors.white,
+                  foregroundColor: AppTheme.primary,
+                  child: _isRefreshingLocation
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh_rounded),
+                ),
+                const SizedBox(height: 10),
+                FloatingActionButton.small(
+                  heroTag: "recenter_map",
+                  onPressed: _fitMap,
+                  backgroundColor: Colors.white,
+                  foregroundColor: AppTheme.textDark,
+                  child: const Icon(Icons.center_focus_strong_rounded),
+                ),
+              ],
+            ),
+          ),
+
           if (_isLoadingRoute)
             const Positioned(
               top: 20,

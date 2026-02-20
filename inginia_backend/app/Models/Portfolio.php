@@ -11,13 +11,20 @@ class Portfolio extends Model
 
     protected $fillable = [
         'provider_id',
+        'reservation_id',
         'image_path',
         'title',
         'description',
+        'type',
     ];
 
     public function provider()
     {
         return $this->belongsTo(User::class, 'provider_id');
+    }
+
+    public function reservation()
+    {
+        return $this->belongsTo(Reservation::class);
     }
 }

@@ -10,12 +10,133 @@ use Google\Client as GoogleClient;
 use Illuminate\Support\Str;
 use App\Http\Requests\RegisterRequest;
 use App\Http\Requests\LoginRequest;
+use App\Models\OtpVerification;
+use App\Models\UserRefreshToken;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\Mail;
 
 class AuthController extends Controller
 {
+    public function sendOtp(Request $request)
+    {
+        $request->validate([
+            'identifier' => 'required|string',
+            'type' => 'required|in:email,phone',
+        ]);
+
+        $identifier = trim($request->identifier);
+        $type = $request->type;
+
+        return $this->sendOtpInternal($identifier, $type);
+    }
+
+    private function sendOtpInternal($identifier, $type)
+    {
+        // Generate 6-digit code
+        $code = str_pad(rand(0, 999999), 6, '0', STR_PAD_LEFT);
+        
+        // Store OTP
+        OtpVerification::updateOrCreate(
+            ['identifier' => $identifier, 'type' => $type],
+            [
+                'code' => $code,
+                'attempts' => 0,
+                'expires_at' => Carbon::now()->addMinutes(10),
+                'verified_at' => null,
+            ]
+        );
+
+        // Send OTP
+        if ($type === 'email') {
+            try {
+                Mail::raw("Votre code de vérification Inginia est : $code", function ($message) use ($identifier) {
+                    $message->to($identifier)->subject('Code de vérification Inginia');
+                });
+            } catch (\Exception $e) {
+                \Log::error("Failed to send email OTP: " . $e->getMessage());
+                return response()->json(['error' => 'Erreur lors de l\'envoi de l\'email'], 500);
+            }
+        } else {
+            // Envoi par SMS
+            $this->sendSms($identifier, "Votre code de vérification Inginia est : $code");
+        }
+
+        return response()->json(['message' => 'Code envoyé avec succès']);
+    }
+
+    private function sendSms($phone, $message)
+    {
+        // TODO: Intégrer ici votre fournisseur SMS (Twilio, Vonage, Infobip, etc.)
+        // Pour l'instant, on loggue juste le message dans les fichiers de log (storage/logs/laravel.log)
+        \Log::info("SMS envoyé à $phone : $message");
+
+        // Exemple d'implémentation future :
+        /*
+        Http::post('https://api.sms-provider.com/send', [
+            'to' => $phone,
+            'text' => $message,
+            'api_key' => config('services.sms.key')
+        ]);
+        */
+    }
+
+    public function verifyOtp(Request $request)
+    {
+        $request->validate([
+            'identifier' => 'required|string',
+            'code' => 'required|string',
+            'type' => 'required|in:email,phone',
+        ]);
+
+        $identifier = trim($request->identifier);
+        $reqCode = trim($request->code);
+        $type = $request->type;
+
+        $otp = OtpVerification::where('identifier', $identifier)
+            ->where('type', $type)
+            ->first();
+
+        if (!$otp) {
+            return response()->json(['error' => 'Aucun code trouvé pour cet identifiant'], 404);
+        }
+
+        if ($otp->expires_at->isPast()) {
+            return response()->json(['error' => 'Le code a expiré'], 403);
+        }
+
+        if ($otp->attempts >= 3) {
+            return response()->json(['error' => 'Trop de tentatives. Veuillez demander un nouveau code.'], 403);
+        }
+
+        if ($otp->code !== $reqCode) {
+            $otp->increment('attempts');
+            return response()->json(['error' => 'Code invalide'], 403);
+        }
+
+        $otp->update(['verified_at' => Carbon::now()]);
+
+        // Mettre à jour l'utilisateur si existant
+        $user = User::where('email', $identifier)->orWhere('phone', $identifier)->first();
+        if ($user) {
+            if ($type === 'email') {
+                $user->email_verified_at = Carbon::now();
+            } else {
+                // Si vous avez un champ pour le téléphone, sinon on peut utiliser le même ou un autre champ
+                 $user->email_verified_at = Carbon::now(); // On considère que la verif valide le compte
+            }
+            $user->save();
+        }
+
+        return response()->json(['message' => 'Code vérifié avec succès']);
+    }
+
     public function register(RegisterRequest $request)
     {
         // Validation automatique via RegisterRequest
+        
+        $email = $request->email ? trim($request->email) : null;
+        $phone = $request->phone ? trim($request->phone) : null;
+        $type = $email ? 'email' : 'phone';
 
         // Upload photo si présente
         $photoName = null;
@@ -43,7 +164,9 @@ class AuthController extends Controller
             'is_agency' => $request->is_agency ?? false,
             // Prestataires need admin validation
             'is_validated' => $request->role === 'prestataire' ? false : true,
+            'email_verified_at' => null, // OTP après inscription
         ]);
+
 
         // Attacher les professions si elles existent
         if ($request->has('profession_ids')) {
@@ -74,9 +197,14 @@ class AuthController extends Controller
         // Création du token
         $token = $user->createToken('LaravelPassportToken')->accessToken;
 
+        // Envoyer le code OTP
+        $identifier = $email ?? $phone;
+        $this->sendOtpInternal($identifier, $type);
+
         // Réponse JSON
         return response()->json([
-            'message' => 'Utilisateur enregistré avec succès',
+            'message' => 'Utilisateur enregistré avec succès. Veuillez vérifier votre code OTP envoyé.',
+            'require_verification' => true,
             'user' => [
                 'id' => $user->id,
                 'name' => $user->name,
@@ -104,19 +232,60 @@ class AuthController extends Controller
 
     public function login(LoginRequest $request)
     {
-        $credentials = $request->only('email', 'password');
+        $credentials = [];
+        if ($request->email) {
+            $credentials = ['email' => $request->email, 'password' => $request->password];
+        } else {
+            $credentials = ['phone' => $request->phone, 'password' => $request->password];
+        }
         
         if (! Auth::attempt($credentials)) {
-            return response()->json(['error' => 'Email ou mot de passe invalide'], 401);
+            return response()->json(['error' => 'Identifiants invalides'], 401);
         }
         
         $user = Auth::user();
         
-        // Removed 403 block for unvalidated providers to allow "offline mode" access
-        
-        $token = $user->createToken('LaravelPassportToken')->accessToken;
+        $tokenResult = $user->createToken('LaravelPassportToken');
+        $accessToken = $tokenResult->accessToken;
 
-        return response()->json(['message' => 'Connexion réussie', 'user' => $user, 'token' => $token]);
+        $refreshToken = null;
+        if ($request->remember_me) {
+            $refreshToken = Str::random(60);
+            UserRefreshToken::create([
+                'user_id' => $user->id,
+                'token' => $refreshToken,
+                'expires_at' => Carbon::now()->addMonths(6),
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Connexion réussie',
+            'user' => $user,
+            'token' => $accessToken,
+            'refresh_token' => $refreshToken,
+        ]);
+    }
+
+    public function refreshToken(Request $request)
+    {
+        $request->validate([
+            'refresh_token' => 'required|string',
+        ]);
+
+        $refreshTokenEntry = UserRefreshToken::where('token', $request->refresh_token)
+            ->where('expires_at', '>', Carbon::now())
+            ->first();
+
+        if (!$refreshTokenEntry) {
+            return response()->json(['error' => 'Token de rafraîchissement invalide ou expiré'], 401);
+        }
+
+        $user = $refreshTokenEntry->user;
+        $newAccessToken = $user->createToken('LaravelPassportToken')->accessToken;
+
+        return response()->json([
+            'token' => $newAccessToken,
+        ]);
     }
 
     public function googleLogin(Request $request)
@@ -184,6 +353,16 @@ class AuthController extends Controller
         ]);
 
         $user = auth()->user();
+
+        // 🛡️ SECURITY: Un prestataire ne peut pas passer en disponible si son solde est <= 0
+        if ($request->is_available && $user->role === 'prestataire' && $user->balance <= 0) {
+            return response()->json([
+                'error' => 'Solde insuffisant',
+                'message' => 'Votre portefeuille est vide. Veuillez recharger votre compte pour passer en disponible.',
+                'balance' => (float) $user->balance
+            ], 403);
+        }
+
         $user->is_available = $request->is_available;
         $user->save();
 

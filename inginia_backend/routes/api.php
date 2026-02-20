@@ -31,11 +31,16 @@ use App\Services\FcmService;
 // Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
 //     Route::get('/admin/dashboard', [AdminController::class, 'index']);
 // });
-
+Route::get('/health', function () {
+    return response()->json(['status' => 'ok'], 200);
+});
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
-Route::post('/auth/google', [GoogleController::class, 'loginWithGoogle']);
+Route::post('/auth/refresh', [AuthController::class, 'refreshToken']);
+Route::post('/otp/send', [AuthController::class, 'sendOtp']);
+Route::post('/otp/verify', [AuthController::class, 'verifyOtp']);
+Route::post('/auth/google', [AuthController::class, 'googleLogin']);
 Route::get('/professions', [ProfessionController::class, 'index']);
 Route::get('/categories', [HomeController::class, 'getCategories']);
 Route::get('/providers/popular', [HomeController::class, 'getPopularProviders']);
@@ -84,6 +89,7 @@ Route::middleware('auth:api')->group(function () {
 
     Route::get('/reservations/{id}', [ReservationController::class, 'show']);
     Route::post('/reservations/{id}/location', [ReservationController::class, 'updateLocation']);
+    Route::post('/reservations/{id}/photos', [ReservationController::class, 'uploadPhotos']);
     Route::get('/client-reservations/{providerId}', [ReservationController::class, 'getClientReservationsForProvider']);
 
     Route::post('/reservations/{provider}', [ReservationController::class, 'store']);
@@ -127,6 +133,7 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/providers/{id}/validate', [\App\Http\Controllers\AdminController::class, 'validateProvider']);
         Route::delete('/providers/{id}/reject', [\App\Http\Controllers\AdminController::class, 'rejectProvider']);
         Route::get('/users', [\App\Http\Controllers\AdminController::class, 'getAllUsers']);
+        Route::patch('/users/{id}/toggle-active', [\App\Http\Controllers\AdminController::class, 'toggleActiveStatus']);
         Route::put('/users/{id}', [\App\Http\Controllers\AdminController::class, 'updateUser']);
         Route::delete('/users/{id}', [\App\Http\Controllers\AdminController::class, 'deleteUser']);
         

@@ -14,6 +14,7 @@ class Message extends Model
         'sender_id',
         'message',
         'image_url',
+        'audio_url',
     ];
 
     public function user() {

@@ -1,5 +1,7 @@
 import 'dart:math';
 import 'package:geolocator/geolocator.dart';
+import 'package:dio/dio.dart';
+import 'api_service.dart';
 import '../models/user_model.dart';
 
 /// Service for handling device location and permissions
@@ -180,5 +182,78 @@ class LocationService {
       provider.latitude!,
       provider.longitude!,
     );
+  }
+
+  // -----------------------------------------------------------------------------
+  // Geocoding
+  // -----------------------------------------------------------------------------
+
+  /// Convertit une adresse textuelle en coordonnées GPS
+  /// Utilise Nominatim (OpenStreetMap)
+  Future<Map<String, double>?> geocodeAddress(String address) async {
+    try {
+      final query = Uri.encodeComponent(address);
+      final url =
+          "https://nominatim.openstreetmap.org/search?q=$query&format=json&limit=1&accept-language=fr";
+
+      final dio = ApiService().client;
+      final response = await dio.get(
+        url,
+        options: Options(
+          headers: {
+            'User-Agent': 'InginiaApp/1.0 (com.inginia.world)',
+            'Accept-Language': 'fr-FR,fr;q=0.9',
+          },
+        ),
+      );
+
+      if (response.data is List && (response.data as List).isNotEmpty) {
+        final result = (response.data as List)[0];
+        return {
+          'lat': double.parse(result['lat'].toString()),
+          'lng': double.parse(result['lon'].toString()),
+        };
+      }
+      return null;
+    } catch (e) {
+      print("Geocoding error: $e");
+      return null;
+    }
+  }
+
+  /// Recherche des suggestions d'adresses (Autocomplete)
+  Future<List<Map<String, dynamic>>> searchLocations(String query) async {
+    if (query.length < 3) return [];
+
+    try {
+      final encodedQuery = Uri.encodeComponent(query);
+      final url =
+          "https://nominatim.openstreetmap.org/search?q=$encodedQuery&format=json&limit=5&addressdetails=1&accept-language=fr";
+
+      final dio = ApiService().client;
+      final response = await dio.get(
+        url,
+        options: Options(
+          headers: {
+            'User-Agent': 'InginiaApp/1.0 (com.inginia.world)',
+            'Accept-Language': 'fr-FR,fr;q=0.9',
+          },
+        ),
+      );
+
+      if (response.data is List) {
+        return (response.data as List).map((item) {
+          return {
+            'display_name': item['display_name'],
+            'lat': double.parse(item['lat'].toString()),
+            'lng': double.parse(item['lon'].toString()),
+          };
+        }).toList();
+      }
+      return [];
+    } catch (e) {
+      print("Search error: $e");
+      return [];
+    }
   }
 }

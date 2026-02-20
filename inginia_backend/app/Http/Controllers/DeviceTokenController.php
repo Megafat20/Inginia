@@ -32,6 +32,10 @@ class DeviceTokenController extends Controller
                 'revoked' => false,
             ]
         );
+
+        if ($userId) {
+            $request->user()->update(['fcm_token' => $data['token']]);
+        }
     
         return response()->json(['status' => 'ok', 'deviceToken' => $deviceToken]);
     }

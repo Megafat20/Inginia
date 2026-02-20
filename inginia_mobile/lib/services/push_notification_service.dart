@@ -62,8 +62,11 @@ class PushNotificationService {
     // Handle Foreground Messages
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       print("📩 Foreground Message: ${message.notification?.title}");
-      _messageStream.add(message.data);
-      _showLocalNotification(message);
+
+      final data = message.data;
+
+      _messageStream.add(data);
+      showLocalNotification(message);
       _incrementBadge();
     });
 
@@ -91,7 +94,7 @@ class PushNotificationService {
           'default',
           'Notifications générales',
           description: 'Notifications générales de l\'application',
-          importance: Importance.high,
+          importance: Importance.max,
           playSound: true,
           enableVibration: true,
         );
@@ -104,7 +107,6 @@ class PushNotificationService {
           importance: Importance.max,
           playSound: true,
           enableVibration: true,
-          sound: RawResourceAndroidNotificationSound('notification_sound'),
         );
 
     const AndroidNotificationChannel messagesChannel =
@@ -112,9 +114,8 @@ class PushNotificationService {
           'messages',
           'Messages',
           description: 'Nouveaux messages',
-          importance: Importance.high,
+          importance: Importance.max,
           playSound: true,
-          sound: RawResourceAndroidNotificationSound('message_sound'),
         );
 
     const AndroidNotificationChannel urgentChannel = AndroidNotificationChannel(
@@ -126,14 +127,13 @@ class PushNotificationService {
       enableVibration: true,
       enableLights: true,
       ledColor: Color(0xFFDC2626),
-      sound: RawResourceAndroidNotificationSound('urgent_sound'),
     );
 
     const AndroidNotificationChannel statusChannel = AndroidNotificationChannel(
       'status_updates',
       'Mises à jour de statut',
       description: 'Changements de statut des réservations',
-      importance: Importance.high,
+      importance: Importance.max,
     );
 
     const AndroidNotificationChannel trackingChannel =
@@ -141,7 +141,7 @@ class PushNotificationService {
           'tracking',
           'Suivi en temps réel',
           description: 'Notifications de localisation',
-          importance: Importance.defaultImportance,
+          importance: Importance.max,
         );
 
     // Create channels
@@ -185,6 +185,9 @@ class PushNotificationService {
           requestAlertPermission: true,
           requestBadgePermission: true,
           requestSoundPermission: true,
+          defaultPresentAlert: true,
+          defaultPresentBadge: true,
+          defaultPresentSound: true,
         );
 
     const InitializationSettings initSettings = InitializationSettings(
@@ -207,7 +210,7 @@ class PushNotificationService {
     );
   }
 
-  static Future<void> _showLocalNotification(RemoteMessage message) async {
+  static Future<void> showLocalNotification(RemoteMessage message) async {
     final notification = message.notification;
     final data = message.data;
 
@@ -217,17 +220,8 @@ class PushNotificationService {
     final channelId = _getChannelId(type);
 
     // Determine notification style and priority
-    final importance = type == 'urgent_request'
-        ? Importance.max
-        : (type == 'new_reservation'
-              ? Importance.high
-              : Importance.defaultImportance);
-
-    final priority = type == 'urgent_request'
-        ? Priority.max
-        : (type == 'new_reservation'
-              ? Priority.high
-              : Priority.defaultPriority);
+    const importance = Importance.max;
+    const priority = Priority.max;
 
     final AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
@@ -264,7 +258,7 @@ class PushNotificationService {
     );
 
     await _localNotifications.show(
-      _notificationId++,
+      message.messageId?.hashCode ?? _notificationId++,
       notification.title,
       notification.body,
       details,
@@ -279,6 +273,7 @@ class PushNotificationService {
       case 'new_message':
         return 'messages';
       case 'urgent_request':
+      case 'sos':
         return 'urgent';
       case 'status_change':
         return 'status_updates';
@@ -330,6 +325,7 @@ class PushNotificationService {
       case 'new_message':
         return const Color(0xFF3B82F6);
       case 'urgent_request':
+      case 'sos':
         return const Color(0xFFDC2626);
       case 'status_change':
         return const Color(0xFFF59E0B);
@@ -386,7 +382,7 @@ class PushNotificationService {
 
       final apiService = ApiService();
       await apiService.client.post(
-        '/device-tokens/register',
+        '/devices/register',
         data: {
           'token': token,
           'platform': Platform.isAndroid ? 'android' : 'ios',

@@ -483,144 +483,151 @@ class _RechargeModalState extends State<RechargeModal> {
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: Container(
-              width: 50,
-              height: 5,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(10),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 50,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 20),
-          const Text(
-            "Recharger mon compte",
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.textDark,
+            const SizedBox(height: 20),
+            const Text(
+              "Recharger mon compte",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textDark,
+              ),
             ),
-          ),
-          const SizedBox(height: 24),
+            const SizedBox(height: 24),
 
-          // Provider Selection
-          const Text(
-            "Moyen de paiement",
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: AppTheme.textDark,
+            // Provider Selection
+            const Text(
+              "Moyen de paiement",
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textDark,
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 90,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: _providers.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
-              itemBuilder: (context, index) {
-                final p = _providers[index];
-                final isSelected = _selectedProvider == p['id'];
-                return GestureDetector(
-                  onTap: () => setState(() => _selectedProvider = p['id']),
-                  child: Container(
-                    width: 80,
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? p['color'].withOpacity(0.1)
-                          : Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: isSelected ? p['color'] : Colors.grey.shade200,
-                        width: 2,
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 90,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _providers.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemBuilder: (context, index) {
+                  final p = _providers[index];
+                  final isSelected = _selectedProvider == p['id'];
+                  return GestureDetector(
+                    onTap: () => setState(() => _selectedProvider = p['id']),
+                    child: Container(
+                      width: 80,
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? p['color'].withOpacity(0.1)
+                            : Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isSelected ? p['color'] : Colors.grey.shade200,
+                          width: 2,
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(p['icon'], color: p['color']),
+                          const SizedBox(height: 8),
+                          Text(
+                            p['name'].split(
+                              ' ',
+                            )[0], // First word only for space
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: isSelected ? p['color'] : Colors.grey,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(p['icon'], color: p['color']),
-                        const SizedBox(height: 8),
-                        Text(
-                          p['name'].split(' ')[0], // First word only for space
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: isSelected ? p['color'] : Colors.grey,
-                          ),
-                        ),
-                      ],
+                  );
+                },
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // Inputs
+            TextFormField(
+              controller: _phoneController,
+              keyboardType: TextInputType.phone,
+              decoration: InputDecoration(
+                labelText: "Numéro de téléphone",
+                prefixIcon: const Icon(Icons.phone_iphone_rounded),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _amountController,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: InputDecoration(
+                labelText: "Montant (FCFA)",
+                prefixIcon: const Icon(Icons.monetization_on_rounded),
+                suffixText: "FCFA",
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // Action Button
+            ElevatedButton(
+              onPressed: _isLoading ? null : _processRecharge,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                elevation: 0,
+              ),
+              child: _isLoading
+                  ? const SizedBox(
+                      height: 24,
+                      width: 24,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Text(
+                      "Payer maintenant",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                );
-              },
             ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Inputs
-          TextFormField(
-            controller: _phoneController,
-            keyboardType: TextInputType.phone,
-            decoration: InputDecoration(
-              labelText: "Numéro de téléphone",
-              prefixIcon: const Icon(Icons.phone_iphone_rounded),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _amountController,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            decoration: InputDecoration(
-              labelText: "Montant (FCFA)",
-              prefixIcon: const Icon(Icons.monetization_on_rounded),
-              suffixText: "FCFA",
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Action Button
-          ElevatedButton(
-            onPressed: _isLoading ? null : _processRecharge,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primary,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              elevation: 0,
-            ),
-            child: _isLoading
-                ? const SizedBox(
-                    height: 24,
-                    width: 24,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2,
-                    ),
-                  )
-                : const Text(
-                    "Payer maintenant",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-          ),
-          const SizedBox(height: 16),
-        ],
+            const SizedBox(height: 16),
+          ],
+        ),
       ),
     );
   }

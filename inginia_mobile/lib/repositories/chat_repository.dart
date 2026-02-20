@@ -34,14 +34,21 @@ class ChatRepository {
     int reservationId,
     String? content, {
     String? imagePath,
+    String? audioPath,
   }) async {
     try {
       dynamic data;
 
-      if (imagePath != null) {
+      if (imagePath != null || audioPath != null) {
         data = FormData.fromMap({
           if (content != null) 'content': content,
-          'image': await MultipartFile.fromFile(imagePath),
+          if (imagePath != null)
+            'image': await MultipartFile.fromFile(imagePath),
+          if (audioPath != null)
+            'audio': await MultipartFile.fromFile(
+              audioPath,
+              filename: 'voice_note.m4a',
+            ),
         });
       } else {
         data = {'content': content};

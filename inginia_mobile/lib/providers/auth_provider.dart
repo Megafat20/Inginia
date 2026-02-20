@@ -1,17 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart'; // ADD THIS
 import '../models/user_model.dart';
 import '../repositories/auth_repository.dart';
 import '../services/push_notification_service.dart';
 import '../services/location_service.dart';
+import '../services/api_service.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 class AuthProvider extends ChangeNotifier {
   final AuthRepository _authRepository = AuthRepository();
+  final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
 
   User? _user;
   bool _isLoading = false;
   String? _error;
   bool _isOfflineMode = false;
   bool _showLogin = false;
+  bool _hasSeenOnboarding = true;
 
   User? get user => _user;
   bool get isLoading => _isLoading;
@@ -19,15 +24,34 @@ class AuthProvider extends ChangeNotifier {
   bool get isAuthenticated => _user != null;
   bool get isOfflineMode => _isOfflineMode;
   bool get shouldShowLogin => _showLogin;
+  bool get hasSeenOnboarding => _hasSeenOnboarding;
+
+  // ✅ THE KEY FIX: never notify mid-frame
+  void _safeNotify() {
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.idle ||
+        phase == SchedulerPhase.postFrameCallbacks) {
+      notifyListeners();
+    } else {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        notifyListeners();
+      });
+    }
+  }
+
+  void setHasSeenOnboarding(bool value) {
+    _hasSeenOnboarding = value;
+    _safeNotify();
+  }
 
   void setShowLogin(bool value) {
     _showLogin = value;
-    notifyListeners();
+    _safeNotify();
   }
 
   void setOfflineMode(bool value) {
     _isOfflineMode = value;
-    notifyListeners();
+    _safeNotify();
   }
 
   Future<void> updateAvailability(bool value) async {
@@ -35,27 +59,32 @@ class AuthProvider extends ChangeNotifier {
       await _authRepository.updateAvailability(value);
       if (_user != null) {
         _user = _user!.copyWith(isAvailable: value);
-        notifyListeners();
+        _safeNotify();
       }
     } catch (e) {
       print("Error updating availability: $e");
+      rethrow;
     }
   }
 
-  // Try to restore session on app start
   Future<void> checkAuth() async {
     _isLoading = true;
-    notifyListeners();
+    _safeNotify();
     try {
       _user = await _authRepository.getMe();
       if (_user != null) {
-        // Update location silently on startup
+        try {
+          PushNotificationService.uploadPendingToken();
+        } catch (e) {
+          print("⚠️ Error uploading token on checkAuth: $e");
+        }
+
         LocationService()
             .getCurrentLocation()
             .then((loc) {
               if (loc != null) {
                 _authRepository.updateProfile(
-                  email: _user?.email, // Required by backend validation
+                  email: _user?.email,
                   latitude: loc.latitude,
                   longitude: loc.longitude,
                 );
@@ -67,30 +96,49 @@ class AuthProvider extends ChangeNotifier {
       _user = null;
     } finally {
       _isLoading = false;
-      notifyListeners();
+      _safeNotify();
     }
   }
 
-  Future<bool> login(String email, String password) async {
+  Future<bool> login({
+    String? email,
+    String? phone,
+    required String password,
+    bool rememberMe = false,
+  }) async {
     _isLoading = true;
     _error = null;
-    notifyListeners();
+    _safeNotify();
 
     try {
-      _user = await _authRepository.login(email, password);
-      // 🔥 Upload FCM token after login
-      PushNotificationService.uploadPendingToken();
+      if ((email == null && phone == null) || password.isEmpty) {
+        _error = 'Email/Téléphone et mot de passe requis';
+        _isLoading = false;
+        _safeNotify();
+        return false;
+      }
 
-      // 🔥 Update Location on Login
+      _user = await _authRepository.login(
+        email: email,
+        phone: phone,
+        password: password,
+        rememberMe: rememberMe,
+      );
+
+      try {
+        PushNotificationService.uploadPendingToken();
+      } catch (e) {
+        print('⚠️ FCM upload failed: $e');
+      }
+
       try {
         final loc = await LocationService().getCurrentLocation();
         if (loc != null) {
           await _authRepository.updateProfile(
-            email: _user?.email, // Required by backend validation
+            email: _user?.email,
             latitude: loc.latitude,
             longitude: loc.longitude,
           );
-          // Refresh user data with new location
           final updatedUser = await _authRepository.getMe();
           if (updatedUser != null) _user = updatedUser;
         }
@@ -99,19 +147,61 @@ class AuthProvider extends ChangeNotifier {
       }
 
       _isLoading = false;
-      notifyListeners();
+      _showLogin = false;
+      _safeNotify();
       return true;
     } catch (e) {
       _error = e.toString().replaceAll('Exception: ', '');
       _isLoading = false;
-      notifyListeners();
+      _safeNotify();
       return false;
     }
   }
 
-  Future<bool> register({
+  Future<bool> loginWithGoogle() async {
+    _isLoading = true;
+    _error = null;
+    _safeNotify();
+
+    try {
+      try {
+        await _googleSignIn.signOut();
+      } catch (e) {
+        print('⚠️ Failed to signOut: $e');
+      }
+
+      await _googleSignIn.initialize();
+      final googleUser = await _googleSignIn.authenticate();
+      final googleAuth = await googleUser.authentication;
+      final String? idToken = googleAuth.idToken;
+
+      if (idToken == null) throw Exception("ID Token Google manquant");
+
+      _user = await _authRepository.loginWithGoogle(idToken);
+
+      PushNotificationService.uploadPendingToken();
+      _showLogin = false;
+      _isLoading = false;
+      _safeNotify();
+      return true;
+    } catch (e) {
+      if (e is GoogleSignInException &&
+          e.code == GoogleSignInExceptionCode.canceled) {
+        _error = e.toString().contains('16')
+            ? 'Erreur Google (Code 16): Vérifiez la configuration SHA-1.'
+            : 'Authentification annulée.';
+      } else {
+        _error = e.toString().replaceAll('Exception: ', '');
+      }
+      _isLoading = false;
+      _safeNotify();
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>> register({
     required String name,
-    required String email,
+    String? email,
     required String password,
     String? phone,
     String? role,
@@ -127,14 +217,14 @@ class AuthProvider extends ChangeNotifier {
   }) async {
     _isLoading = true;
     _error = null;
-    notifyListeners();
+    _safeNotify();
 
     try {
-      _user = await _authRepository.register(
+      final result = await _authRepository.register(
         name: name,
-        email: email,
+        email: email != null && email.isNotEmpty ? email : null,
         password: password,
-        phone: phone,
+        phone: phone != null && phone.isNotEmpty ? phone : null,
         role: role,
         isAgency: isAgency,
         professionIds: professionIds,
@@ -146,43 +236,87 @@ class AuthProvider extends ChangeNotifier {
         latitude: latitude,
         longitude: longitude,
       );
-      // 🔥 Upload FCM token after registration
+
+      _user = result['user'];
       PushNotificationService.uploadPendingToken();
       _isLoading = false;
-      notifyListeners();
-      return true;
+      _safeNotify();
+
+      return {
+        'success': true,
+        'requireVerification': result['requireVerification'] ?? false,
+        'message': result['message'],
+        'identifier': email ?? phone,
+        'verificationMethod': email != null ? 'email' : 'phone',
+      };
     } catch (e) {
       _error = e.toString().replaceAll('Exception: ', '');
       _isLoading = false;
-      notifyListeners();
-      return false;
+      _safeNotify();
+      return {'success': false, 'error': _error};
+    }
+  }
+
+  Future<void> sendOtp(String identifier, String type) async {
+    _isLoading = true;
+    _error = null;
+    _safeNotify();
+
+    try {
+      await _authRepository.sendOtp(identifier, type);
+    } catch (e) {
+      _error = e.toString().replaceAll('Exception: ', '');
+      rethrow;
+    } finally {
+      _isLoading = false;
+      _safeNotify();
+    }
+  }
+
+  Future<void> verifyOtp(String identifier, String code, String type) async {
+    _isLoading = true;
+    _error = null;
+    _safeNotify();
+
+    try {
+      await _authRepository.verifyOtp(identifier, code, type);
+    } catch (e) {
+      _error = e.toString().replaceAll('Exception: ', '');
+      rethrow;
+    } finally {
+      _isLoading = false;
+      _safeNotify();
     }
   }
 
   Future<void> logout() async {
-    await _authRepository.logout();
-    _user = null;
-    _isOfflineMode = false;
-    notifyListeners();
+    try {
+      await _authRepository.logout();
+      _user = null;
+      _isOfflineMode = false;
+      _safeNotify();
+    } catch (e) {
+      print('⚠️ Logout error: $e');
+    }
   }
 
   Future<void> updateLocation(double latitude, double longitude) async {
     _isLoading = true;
-    notifyListeners();
+    _safeNotify();
+
     try {
       await _authRepository.updateProfile(
-        email: _user?.email, // Indispensable pour la validation backend
+        email: _user?.email,
         latitude: latitude,
         longitude: longitude,
       );
-      // Update local user object
       _user = await _authRepository.getMe();
     } catch (e) {
-      print("Error updating location: $e");
+      print("🔴 Error updating location: $e");
       rethrow;
     } finally {
       _isLoading = false;
-      notifyListeners();
+      _safeNotify();
     }
   }
 }

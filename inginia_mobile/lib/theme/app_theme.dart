@@ -14,6 +14,8 @@ class AppTheme {
     0xFF10B981,
   ); // Emerald 500 - Succès & Validation
 
+  static const Color error = Color(0xFFEF4444); // Red 500
+
   static const Color background = Color(
     0xFFF8FAFC,
   ); // Slate 50 - Fond très clair
@@ -25,6 +27,12 @@ class AppTheme {
   // Additional text color getters for convenience
   static const Color textPrimary = Color(0xFF1E293B); // Slate 800
   static const Color textSecondary = Color(0xFF64748B); // Slate 500
+
+  static TextStyle get headingStyle => GoogleFonts.outfit(
+    fontSize: 24,
+    fontWeight: FontWeight.bold,
+    color: textDark,
+  );
 
   // 🌙 Dark Mode Colors
   static const Color bgDark = Color(0xFF0F172A); // Slate 900

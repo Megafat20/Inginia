@@ -20,10 +20,10 @@ class RegisterRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => 'nullable|string|max:255',
-            'email' => 'required|string|email|unique:users,email',
+            'name' => 'required|string|max:255',
+            'email' => 'required_without:phone|nullable|string|email|unique:users,email',
+            'phone' => 'required_without:email|nullable|string|unique:users,phone',
             'password' => 'required|string|min:6',
-            'phone' => 'nullable|string',
             'role' => 'nullable|string|in:client,prestataire,service',
             'service' => 'nullable|string',
             'location' => 'nullable|string',

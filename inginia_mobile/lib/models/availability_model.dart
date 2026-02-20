@@ -1,10 +1,12 @@
 class Availability {
+  final int? id;
   final String day;
   final String startTime;
   final String endTime;
   final bool isActive;
 
   Availability({
+    this.id,
     required this.day,
     required this.startTime,
     required this.endTime,
@@ -13,6 +15,7 @@ class Availability {
 
   factory Availability.fromJson(Map<String, dynamic> json) {
     return Availability(
+      id: json['id'],
       day: json['day'],
       startTime: _formatTime(json['start_time']),
       endTime: _formatTime(json['end_time']),
@@ -31,5 +34,26 @@ class Availability {
       return time.substring(0, 5);
     }
     return time;
+  }
+
+  String get dayInFrench {
+    switch (day.toLowerCase()) {
+      case 'monday':
+        return 'Lundi';
+      case 'tuesday':
+        return 'Mardi';
+      case 'wednesday':
+        return 'Mercredi';
+      case 'thursday':
+        return 'Jeudi';
+      case 'friday':
+        return 'Vendredi';
+      case 'saturday':
+        return 'Samedi';
+      case 'sunday':
+        return 'Dimanche';
+      default:
+        return day;
+    }
   }
 }

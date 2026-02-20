@@ -1,8 +1,9 @@
-import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'push_notification_service.dart';
 import 'api_service.dart';
 
 class WebSocketService {
@@ -12,62 +13,87 @@ class WebSocketService {
 
   WebSocketChannel? _channel;
   bool _isConnected = false;
-  Timer? _heartbeatTimer; // Added heartbeat timer
+  bool _isConnecting = false;
+  Timer? _heartbeatTimer;
+  Timer? _reconnectTimer;
+  final Set<String> _subscribedChannels = {};
 
   Future<void> init() async {
-    if (_isConnected) {
-      print("⚠️ WebSocket already connected");
-      return;
-    }
+    if (_isConnected || _isConnecting) return;
+    _isConnecting = true;
 
+    // Get host from ApiService
+    String host = ApiService.serverHost;
+
+    // Connect to Reverb using Pusher protocol
+    final wsUrl =
+        'ws://$host:8080/app/inginia-key?protocol=7&client=dart&version=1.0.0';
+
+    print("🔌 Connecting to WebSocket: $wsUrl");
+    _connect(wsUrl);
+  }
+
+  void _connect(String url) {
     try {
-      // Configure host
-      // Android Emulator: 10.0.2.2
-      // iOS/Web: 127.0.0.1 (or specific IP)
-      String host = '127.0.0.1';
-      if (Platform.isAndroid) {
-        host = '10.0.2.2';
-      }
+      _channel?.sink.close();
+      _channel = WebSocketChannel.connect(Uri.parse(url));
 
-      // Connect to Reverb using Pusher protocol
-      // Format: ws://host:port/app/{app_key}?protocol=7&client=dart&version=1.0.0
-      final wsUrl =
-          'ws://$host:8080/app/inginia-key?protocol=7&client=dart&version=1.0.0';
-
-      print("🔌 Connecting to: $wsUrl");
-      _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
-
-      // Listen to connection
       _channel!.stream.listen(
         (message) {
+          _isConnecting = false;
+          if (!_isConnected) {
+            print("✅ WebSocket Connected");
+            _isConnected = true;
+            _startHeartbeat();
+          }
           _handleMessage(message);
         },
         onError: (error) {
           print("❌ WebSocket Error: $error");
-          _isConnected = false;
-          _heartbeatTimer?.cancel(); // Cancel timer on error
+          _handleDisconnect(url);
         },
         onDone: () {
-          print("🔌 WebSocket connection closed");
-          _isConnected = false;
-          _heartbeatTimer?.cancel(); // Cancel timer on done
+          print("🔌 WebSocket Connection Closed");
+          _handleDisconnect(url);
         },
+        cancelOnError: true,
       );
-
-      _isConnected = true;
-
-      // Start heartbeat every 30 seconds
-      _heartbeatTimer?.cancel();
-      _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
-        if (_isConnected && _channel != null) {
-          _channel!.sink.add(jsonEncode({'event': 'pusher:ping', 'data': {}}));
-        }
-      });
-
-      print("✅ WebSocket Service Initialized");
     } catch (e) {
-      print("❌ WebSocket Init Error: $e");
+      print("❌ WebSocket Connection Exception: $e");
+      _handleDisconnect(url);
     }
+  }
+
+  void _handleDisconnect(String url) {
+    if (!_isConnected && !_isConnecting && _reconnectTimer?.isActive == true)
+      return;
+
+    _isConnected = false;
+    _isConnecting = false;
+    _heartbeatTimer?.cancel();
+    _reconnectTimer?.cancel();
+    _socketId = null;
+    _subscribedChannels.clear();
+
+    // Retry connection after 5 seconds
+    print("🔄 Attempting to reconnect in 5s...");
+    _reconnectTimer = Timer(const Duration(seconds: 5), () {
+      if (!_isConnected && !_isConnecting) {
+        _isConnecting = true;
+        _connect(url);
+      }
+    });
+  }
+
+  void _startHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _subscribedChannels
+        .clear(); // Reset to allow resubscribing on new connection
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (_isConnected && _channel != null) {
+        _channel!.sink.add(jsonEncode({'event': 'pusher:ping', 'data': {}}));
+      }
+    });
   }
 
   final Map<String, Function(dynamic)> _callbacks = {};
@@ -88,7 +114,7 @@ class WebSocketService {
         _socketId = data['socket_id'];
         print("✅ Connection established to Reverb. Socket ID: $_socketId");
       } else if (event == 'pusher:pong') {
-        // Heartbeat
+        // Heartbeat - silent
       } else if (event == 'pusher_internal:subscription_succeeded') {
         print("✅ Subscription succeeded for $channel");
       } else {
@@ -155,6 +181,8 @@ class WebSocketService {
   }
 
   Future<void> _subscribe(String channel) async {
+    if (_subscribedChannels.contains(channel)) return;
+
     if (_channel == null || !_isConnected) {
       // Wait a bit and retry if we are just connecting
       await Future.delayed(const Duration(milliseconds: 500));
@@ -180,6 +208,7 @@ class WebSocketService {
     });
 
     _channel!.sink.add(subscribeMessage);
+    _subscribedChannels.add(channel);
     print("📡 Subscribed to $channel");
   }
 
@@ -194,11 +223,8 @@ class WebSocketService {
     if (_socketId == null) throw Exception("Socket ID not available");
 
     // Broadcasting auth endpoint is at root level, not under /api
-    // So we need to construct the full URL manually
-    String host = '127.0.0.1';
-    if (Platform.isAndroid) {
-      host = '10.0.2.2';
-    }
+    String host = ApiService.serverHost;
+
     final authUrl = 'http://$host:8000/broadcasting/auth';
 
     // Get the auth token for the request
@@ -219,11 +245,91 @@ class WebSocketService {
     return response.data;
   }
 
+  Future<void> listenToGlobalUserEvents(int userId) async {
+    final channel = 'private-user.$userId';
+    _subscribe(channel);
+    _callbacks[channel] = (data) {
+      // Analyze event type and show notification
+      // Data usually comes with an '_event' key if we injected it, or we rely on the implementation to pass it.
+      // In _handleMessage, I need to ensure event name is passed.
+
+      final event = data['_event'] ?? '';
+      final payload = data;
+
+      if (event.contains('ReservationCreated') ||
+          event.contains('reservation.created')) {
+        PushNotificationService.showLocalNotification(
+          RemoteMessage(
+            notification: RemoteNotification(
+              title: "Nouvelle Réservation",
+              body: "Vous avez reçu une nouvelle demande de réservation.",
+            ),
+            data: {'type': 'new_reservation', 'reservation_id': payload['id']},
+          ),
+        );
+      } else if (event.contains('ReservationUpdated') ||
+          event.contains('reservation.updated')) {
+        final status = payload['status'] ?? 'mis à jour';
+        PushNotificationService.showLocalNotification(
+          RemoteMessage(
+            notification: RemoteNotification(
+              title: "Mise à jour Réservation",
+              body: "Le statut de votre réservation a changé : $status",
+            ),
+            data: {'type': 'status_change', 'reservation_id': payload['id']},
+          ),
+        );
+      } else if (event.contains('MessageSent') ||
+          event.contains('message.new') ||
+          event.contains('message.sent')) {
+        PushNotificationService.showLocalNotification(
+          RemoteMessage(
+            notification: RemoteNotification(
+              title: "Nouveau Message",
+              body: payload['message'] ?? "Vous avez un nouveau message",
+            ),
+            data: {
+              'type': 'new_message',
+              'reservation_id': payload['reservation_id'],
+            },
+          ),
+        );
+      } else if (event.contains('ProviderArrived') ||
+          event.contains('tracking.arrived')) {
+        PushNotificationService.showLocalNotification(
+          RemoteMessage(
+            notification: RemoteNotification(
+              title: "Prestataire Arrivé",
+              body: "Votre prestataire est arrivé sur le lieu du rendez-vous.",
+            ),
+            data: {
+              'type': 'proximity',
+              'reservation_id': payload['reservation_id'],
+            },
+          ),
+        );
+      } else if (event.contains('AccountValidated') ||
+          event.contains('provider.validated')) {
+        PushNotificationService.showLocalNotification(
+          RemoteMessage(
+            notification: RemoteNotification(
+              title: "Compte Validé 🎉",
+              body:
+                  "Votre compte prestataire a été validé ! Vous pouvez maintenant recevoir des missions.",
+            ),
+            data: {'type': 'account_validated'},
+          ),
+        );
+      }
+    };
+  }
+
   Future<void> dispose() async {
     if (_channel != null) {
       await _channel!.sink.close();
       _isConnected = false;
       _callbacks.clear();
+      _heartbeatTimer?.cancel();
     }
   }
 }

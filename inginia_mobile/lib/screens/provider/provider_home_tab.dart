@@ -19,251 +19,242 @@ class _ProviderHomeTabState extends State<ProviderHomeTab> {
   @override
   void initState() {
     super.initState();
-    _refresh();
-  }
-
-  void _refresh() {
-    setState(() {
-      _futureReservations = _repository.getMyReservationsAsProvider();
-    });
+    _futureReservations = _repository.getMyReservationsAsProvider();
   }
 
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().user;
 
-    return Scaffold(
-      backgroundColor: AppTheme.background,
-      body: CustomScrollView(
-        slivers: [
-          // Header Widget
-          SliverToBoxAdapter(
-            child: Container(
-              padding: const EdgeInsets.only(
-                top: 60,
-                left: 20,
-                right: 20,
-                bottom: 40,
+    return CustomScrollView(
+      slivers: [
+        // Header Widget
+        SliverToBoxAdapter(
+          child: Container(
+            padding: const EdgeInsets.only(
+              top: 60,
+              left: 20,
+              right: 20,
+              bottom: 40,
+            ),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [AppTheme.primaryDark, AppTheme.primary],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [AppTheme.primaryDark, AppTheme.primary],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(40),
-                  bottomRight: Radius.circular(40),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.primary.withOpacity(0.3),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(40),
+                bottomRight: Radius.circular(40),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(3),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          shape: BoxShape.circle,
-                        ),
-                        child: CircleAvatar(
-                          radius: 28,
-                          backgroundColor: Colors.white,
-                          backgroundImage: user?.profilePhotoUrl != null
-                              ? NetworkImage(user!.profilePhotoUrl!)
-                              : null,
-                          child: user?.profilePhotoUrl == null
-                              ? Text(
-                                  (user?.displayName ?? 'P')[0].toUpperCase(),
-                                  style: const TextStyle(
-                                    color: AppTheme.primary,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 22,
-                                  ),
-                                )
-                              : null,
-                        ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.primary.withOpacity(0.3),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        shape: BoxShape.circle,
                       ),
-                      const SizedBox(width: 16),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            "Bonjour,",
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          Text(
-                            user?.displayName ?? "Prestataire",
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 24,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                        ],
+                      child: CircleAvatar(
+                        radius: 28,
+                        backgroundColor: Colors.white,
+                        backgroundImage: user?.profilePhotoUrl != null
+                            ? NetworkImage(user!.profilePhotoUrl!)
+                            : null,
+                        child: user?.profilePhotoUrl == null
+                            ? Text(
+                                (user?.displayName ?? 'P')[0].toUpperCase(),
+                                style: const TextStyle(
+                                  color: AppTheme.primary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 22,
+                                ),
+                              )
+                            : null,
                       ),
-                      const Spacer(),
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(15),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.1),
-                            width: 1,
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.notifications_outlined,
-                          color: Colors.white,
-                          size: 26,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 35),
-                  const Text(
-                    "Tableau de bord",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // Stats & Content
-          SliverToBoxAdapter(
-            child: FutureBuilder<List<Reservation>>(
-              future: _futureReservations,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Padding(
-                    padding: EdgeInsets.all(40),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-
-                final reservations = snapshot.data ?? [];
-
-                final pending = reservations
-                    .where((r) => r.status == 'pending')
-                    .length;
-                final completed = reservations
-                    .where((r) => r.status == 'completed')
-                    .length;
-                final total = reservations.length;
-
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
-                  child: Column(
-                    children: [
-                      // Stats Grid - Row 1
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildStatCard(
-                              "En attente",
-                              pending.toString(),
-                              Colors.amber,
-                              Icons.timelapse_rounded,
-                              isPrimary: false,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _buildStatCard(
-                              "Terminées",
-                              completed.toString(),
-                              Colors.green,
-                              Icons.task_alt_rounded,
-                              isPrimary: false,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      // Row 2 - Full Width
-                      _buildStatCard(
-                        "Total Missions",
-                        total.toString(),
-                        AppTheme.primary,
-                        Icons.insights_rounded,
-                        fullWidth: true,
-                        isPrimary: true,
-                      ),
-
-                      const SizedBox(height: 40),
-
-                      // Recent Reservations Title
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            "Dernières demandes",
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: AppTheme.textDark,
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () {},
-                            child: const Text("Voir tout"),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 10),
-
-                      if (reservations.isEmpty)
-                        Container(
-                          padding: const EdgeInsets.all(30),
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: Colors.grey.shade100),
-                          ),
-                          child: const Column(
-                            children: [
-                              Icon(Icons.inbox, size: 40, color: Colors.grey),
-                              SizedBox(height: 10),
-                              Text(
-                                "Aucune activité pour le moment.",
-                                style: TextStyle(color: AppTheme.textLight),
-                              ),
-                            ],
+                    const SizedBox(width: 16),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          "Bonjour,",
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
-
-                      ...reservations
-                          .take(3)
-                          .map((r) => _buildMiniReservationCard(r)),
-                    ],
+                        Text(
+                          user?.displayName ?? "Prestataire",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(15),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.1),
+                          width: 1,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.notifications_outlined,
+                        color: Colors.white,
+                        size: 26,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 35),
+                const Text(
+                  "Tableau de bord",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
                   ),
-                );
-              },
+                ),
+              ],
             ),
           ),
-        ],
-      ),
+        ),
+
+        // Stats & Content
+        SliverToBoxAdapter(
+          child: FutureBuilder<List<Reservation>>(
+            future: _futureReservations,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Padding(
+                  padding: EdgeInsets.all(40),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+
+              final reservations = snapshot.data ?? [];
+
+              final pending = reservations
+                  .where((r) => r.status == 'pending')
+                  .length;
+              final completed = reservations
+                  .where((r) => r.status == 'completed')
+                  .length;
+              final total = reservations.length;
+
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+                child: Column(
+                  children: [
+                    // Stats Grid - Row 1
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildStatCard(
+                            "En attente",
+                            pending.toString(),
+                            Colors.amber,
+                            Icons.timelapse_rounded,
+                            isPrimary: false,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildStatCard(
+                            "Terminées",
+                            completed.toString(),
+                            Colors.green,
+                            Icons.task_alt_rounded,
+                            isPrimary: false,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    // Row 2 - Full Width
+                    _buildStatCard(
+                      "Total Missions",
+                      total.toString(),
+                      AppTheme.primary,
+                      Icons.insights_rounded,
+                      fullWidth: true,
+                      isPrimary: true,
+                    ),
+
+                    const SizedBox(height: 40),
+
+                    // Recent Reservations Title
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          "Dernières demandes",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.textDark,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {},
+                          child: const Text("Voir tout"),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    if (reservations.isEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(30),
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.grey.shade100),
+                        ),
+                        child: const Column(
+                          children: [
+                            Icon(Icons.inbox, size: 40, color: Colors.grey),
+                            SizedBox(height: 10),
+                            Text(
+                              "Aucune activité pour le moment.",
+                              style: TextStyle(color: AppTheme.textLight),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    ...reservations
+                        .take(3)
+                        .map((r) => _buildMiniReservationCard(r)),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 

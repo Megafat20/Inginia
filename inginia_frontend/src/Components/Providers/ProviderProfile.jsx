@@ -161,9 +161,9 @@ const ProviderProfile = () => {
           <span className="flex items-center gap-1 text-gray-700 underline cursor-pointer hover:text-black font-semibold">
             <FaMapMarkerAlt /> {provider.location || "Abidjan, Côte d'Ivoire"}
           </span>
-          {provider.verified_at && (
+          {provider.is_validated && (
             <span className="flex items-center gap-1 text-green-700 bg-green-50 px-2 py-0.5 rounded-full text-xs font-bold ml-2">
-              <FaShieldAlt /> Identité vérifiée
+              <FaShieldAlt /> Dossier vérifié
             </span>
           )}
         </div>

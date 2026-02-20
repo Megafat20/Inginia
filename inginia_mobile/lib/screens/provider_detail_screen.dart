@@ -9,6 +9,7 @@ import '../repositories/provider_repository.dart';
 import '../services/api_service.dart';
 import 'components/reservation_modal.dart';
 import '../widgets/shimmer_loading.dart';
+import '../models/availability_model.dart';
 
 class ProviderDetailScreen extends StatefulWidget {
   final int providerId;
@@ -207,15 +208,105 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      Text(
-                                        provider.displayName,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .headlineMedium
-                                            ?.copyWith(
-                                              fontWeight: FontWeight.bold,
-                                              color: AppTheme.textDark,
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              provider.displayName,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .headlineMedium
+                                                  ?.copyWith(
+                                                    fontWeight: FontWeight.bold,
+                                                    color: AppTheme.textDark,
+                                                    fontSize: 24,
+                                                  ),
+                                              overflow: TextOverflow.ellipsis,
                                             ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        children: [
+                                          if (provider.isValidated)
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 4,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.blue.shade50,
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                border: Border.all(
+                                                  color: Colors.blue.shade200,
+                                                ),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    Icons.verified,
+                                                    size: 14,
+                                                    color: Colors.blue.shade700,
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    "Vérifié",
+                                                    style: TextStyle(
+                                                      color:
+                                                          Colors.blue.shade700,
+                                                      fontSize: 10,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          if (provider.isAgency)
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 4,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.amber.shade50,
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                border: Border.all(
+                                                  color: Colors.amber.shade200,
+                                                ),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    Icons.workspace_premium,
+                                                    size: 14,
+                                                    color:
+                                                        Colors.amber.shade800,
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    "Certifié",
+                                                    style: TextStyle(
+                                                      color:
+                                                          Colors.amber.shade800,
+                                                      fontSize: 10,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                        ],
                                       ),
                                       const SizedBox(height: 4),
                                       Row(
@@ -307,6 +398,11 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
                                 height: 1.5,
                               ),
                             ),
+
+                            const Divider(height: 40),
+
+                            // Disponibilités
+                            _buildAvailabilitySection(details.availabilities),
 
                             const Divider(height: 40),
 
@@ -449,6 +545,73 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
                                         color: AppTheme.textDark,
                                       ),
                                     ),
+                                    if (r.photos.isNotEmpty) ...[
+                                      const SizedBox(height: 12),
+                                      SizedBox(
+                                        height: 80,
+                                        child: ListView.separated(
+                                          scrollDirection: Axis.horizontal,
+                                          itemCount: r.photos.length,
+                                          separatorBuilder: (_, __) =>
+                                              const SizedBox(width: 8),
+                                          itemBuilder: (context, index) {
+                                            return ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              child: Image.network(
+                                                _getReviewImageUrl(
+                                                  r.photos[index],
+                                                ),
+                                                width: 80,
+                                                height: 80,
+                                                fit: BoxFit.cover,
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                    if (r.providerResponse != null) ...[
+                                      const SizedBox(height: 12),
+                                      Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue.withOpacity(0.05),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          border: Border(
+                                            left: BorderSide(
+                                              color: AppTheme.primary,
+                                              width: 3,
+                                            ),
+                                          ),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              "Réponse du prestataire",
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: AppTheme.primary,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              r.providerResponse!,
+                                              style: TextStyle(
+                                                color: AppTheme.textDark,
+                                                fontSize: 13,
+                                                fontStyle: FontStyle.italic,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),
@@ -535,6 +698,7 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
                                     providerId: widget.providerId,
                                     providerName: provider.displayName,
                                     competances: competances,
+                                    availabilities: details.availabilities,
                                   ),
                                 );
                               },
@@ -546,7 +710,8 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
                               : AppTheme.primary,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 32,
+                            horizontal:
+                                16, // Reduced from 32 to prevent overflow
                             vertical: 16,
                           ),
                           shape: RoundedRectangleBorder(
@@ -554,11 +719,42 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
                           ),
                           elevation: 0,
                         ),
-                        child: const Text(
-                          "Réserver",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
+                        child: Row(
+                          children: [
+                            const Icon(Icons.calendar_today_rounded),
+                            const SizedBox(width: 8),
+                            const Text(
+                              "Réserver",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      InkWell(
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("Messagerie bientôt disponible"),
+                            ),
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.all(12), // Reduced padding
+                          decoration: BoxDecoration(
+                            color: AppTheme.primary.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: AppTheme.primary.withOpacity(0.2),
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.chat_bubble_outline_rounded,
+                            color: AppTheme.primary,
                           ),
                         ),
                       ),
@@ -708,11 +904,28 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
     return '$root/storage/portfolios/$path';
   }
 
+  String _getReviewImageUrl(String path) {
+    if (path.startsWith('http')) return path;
+    final apiBase = ApiService.baseUrl;
+    final root = apiBase.replaceAll('/api', '');
+    return '$root/storage/reviews/$path';
+  }
+
   Widget _buildPortfolioSection(List<PortfolioItem> items) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionTitle("Réalisations", Icons.photo_library_outlined),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _buildSectionTitle("Réalisations", Icons.photo_library_outlined),
+            if (items.isNotEmpty)
+              Text(
+                "${items.length} photos",
+                style: TextStyle(color: AppTheme.textLight, fontSize: 13),
+              ),
+          ],
+        ),
         const SizedBox(height: 16),
         if (items.isEmpty)
           const Text(
@@ -721,11 +934,12 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
           )
         else
           SizedBox(
-            height: 180,
+            height: 220,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: items.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              physics: const BouncingScrollPhysics(),
+              separatorBuilder: (_, __) => const SizedBox(width: 16),
               itemBuilder: (context, index) {
                 final item = items[index];
                 return GestureDetector(
@@ -764,59 +978,159 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
                     );
                   },
                   child: Container(
-                    width: 250,
+                    width: 280,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      image: DecorationImage(
-                        image: NetworkImage(_getPortfolioImageUrl(item.image)),
-                        fit: BoxFit.cover,
-                      ),
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 10,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
                     ),
-                    child: (item.title != null || item.description != null)
-                        ? Container(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(24),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Image.network(
+                            _getPortfolioImageUrl(item.image),
+                            fit: BoxFit.cover,
+                          ),
+                          Container(
                             decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(16),
                               gradient: LinearGradient(
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
                                 colors: [
                                   Colors.transparent,
-                                  Colors.black.withOpacity(0.7),
+                                  Colors.transparent,
+                                  Colors.black.withOpacity(0.8),
                                 ],
                               ),
                             ),
-                            padding: const EdgeInsets.all(12),
-                            alignment: Alignment.bottomLeft,
+                          ),
+
+                          // Badge Avant/Après
+                          if (item.type != null)
+                            Positioned(
+                              top: 12,
+                              left: 12,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color:
+                                      (item.type == 'before'
+                                              ? Colors.orange
+                                              : Colors.green)
+                                          .withOpacity(0.9),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: Colors.white.withOpacity(0.2),
+                                  ),
+                                ),
+                                child: Text(
+                                  item.type == 'before' ? "AVANT" : "APRÈS",
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 1,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                          Padding(
+                            padding: const EdgeInsets.all(16),
                             child: Column(
-                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.end,
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 if (item.title != null)
                                   Text(
                                     item.title!,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.bold,
-                                      fontSize: 14,
+                                      fontSize: 16,
                                     ),
                                   ),
                                 if (item.description != null)
                                   Text(
                                     item.description!,
-                                    maxLines: 1,
+                                    maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Colors.white70,
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.8),
                                       fontSize: 12,
                                     ),
                                   ),
                               ],
                             ),
-                          )
-                        : null,
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 );
               },
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildAvailabilitySection(List<Availability> availabilities) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle("Horaires de disponibilité", Icons.access_time),
+        const SizedBox(height: 16),
+        if (availabilities.isEmpty)
+          const Text(
+            "Aucun horaire renseigné.",
+            style: TextStyle(color: AppTheme.textLight),
+          )
+        else
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppTheme.primary.withOpacity(0.1)),
+            ),
+            child: Column(
+              children: availabilities.map((a) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        a.dayInFrench,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textDark,
+                        ),
+                      ),
+                      Text(
+                        "${a.startTime} - ${a.endTime}",
+                        style: const TextStyle(
+                          color: AppTheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
             ),
           ),
       ],

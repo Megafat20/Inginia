@@ -20,6 +20,7 @@ class User {
   final double? longitude;
   final bool isValidated;
   final bool isAvailable;
+  final bool isActive;
 
   User({
     required this.id,
@@ -41,9 +42,15 @@ class User {
     this.longitude,
     this.isValidated = true,
     this.isAvailable = true,
+    this.isActive = true,
   });
 
-  User copyWith({bool? isAvailable, String? name, String? photo}) {
+  User copyWith({
+    bool? isAvailable,
+    bool? isActive,
+    String? name,
+    String? photo,
+  }) {
     return User(
       id: id,
       name: name ?? this.name,
@@ -64,6 +71,7 @@ class User {
       longitude: longitude,
       isValidated: isValidated,
       isAvailable: isAvailable ?? this.isAvailable,
+      isActive: isActive ?? this.isActive,
     );
   }
 
@@ -131,6 +139,10 @@ class User {
           json['is_available'] == 1 ||
           json['is_available'] == true ||
           json['is_available'] == '1',
+      isActive:
+          json['is_active'] == 1 ||
+          json['is_active'] == true ||
+          json['is_active'] == '1',
     );
   }
 }

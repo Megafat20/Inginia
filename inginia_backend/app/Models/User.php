@@ -11,6 +11,15 @@ class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable;
 
+    protected static function booted()
+    {
+        static::saving(function ($user) {
+            if ($user->role === 'prestataire' && $user->balance <= 0) {
+                $user->is_available = false;
+            }
+        });
+    }
+
     protected $fillable = [
         'name',
         'email',
@@ -28,6 +37,9 @@ class User extends Authenticatable
         'is_validated',
         'is_agency',
         'is_available',
+        'is_active',
+        'validation_expires_at',
+        'validation_comment',
         'google_id',
         'fcm_token',
     ];
@@ -42,7 +54,15 @@ class User extends Authenticatable
         'is_validated' => 'boolean',
         'is_agency' => 'boolean',
         'is_available' => 'boolean',
+        'is_active' => 'boolean',
+        'validation_expires_at' => 'datetime',
     ];
+
+    // 🔹 Historique des validations
+    public function providerValidations()
+    {
+        return $this->hasMany(ProviderValidation::class);
+    }
 
     // 🔹 Services proposés par le provider
     public function competances()
@@ -53,7 +73,7 @@ class User extends Authenticatable
     // 🔹 Réservations faites en tant que client
     public function reservations()
     {
-        return $this->hasMany(Reservation::class, 'provider_id');
+        return $this->hasMany(Reservation::class, 'client_id');
     }
 
     // 🔹 Réservations reçues en tant que prestataire ou agence

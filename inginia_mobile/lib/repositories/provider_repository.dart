@@ -8,6 +8,17 @@ import '../models/availability_model.dart';
 class ProviderRepository {
   final ApiService _apiService = ApiService();
 
+  Future<Reservation> getReservation(int id) async {
+    try {
+      final response = await _apiService.client.get('/reservations/$id');
+      return Reservation.fromJson(response.data);
+    } on DioException catch (e) {
+      throw Exception(
+        e.response?.data['message'] ?? 'Erreur lors de la récupération',
+      );
+    }
+  }
+
   Future<void> updateMissionLocation(
     int reservationId,
     double lat,
@@ -31,14 +42,51 @@ class ProviderRepository {
   // 1. Provider Discovery (Public/Client View)
   // -----------------------------------------------------------------------------
 
-  Future<List<User>> getProviders() async {
+  Future<Map<String, dynamic>> getProviders({
+    String? q,
+    int? professionId,
+    double? minPrice,
+    double? maxPrice,
+    double? minRating,
+    bool? onlyAvailable,
+    double? latitude,
+    double? longitude,
+    double? radius,
+    int page = 1,
+    String? sort,
+  }) async {
     try {
-      final response = await _apiService.client.get('/providers');
+      final response = await _apiService.client.get(
+        '/providers',
+        queryParameters: {
+          if (q != null && q.isNotEmpty) 'q': q,
+          if (professionId != null) 'profession_id': professionId,
+          if (minPrice != null) 'min_price': minPrice,
+          if (maxPrice != null) 'max_price': maxPrice,
+          if (minRating != null) 'min_rating': minRating,
+          if (onlyAvailable == true) 'available': 1,
+          if (latitude != null) 'latitude': latitude,
+          if (longitude != null) 'longitude': longitude,
+          if (radius != null) 'radius': radius,
+          if (sort != null) 'sort': sort,
+          'page': page,
+        },
+      );
+
       if (response.statusCode == 200) {
-        final List<dynamic> data = response.data is List
-            ? response.data
-            : response.data['data'] ?? [];
-        return data.map((json) => User.fromJson(json)).toList();
+        final List<dynamic> data = response.data['data'] ?? [];
+        final List<User> providers = data
+            .map((json) => User.fromJson(json))
+            .toList();
+
+        return {
+          'providers': providers,
+          'meta': {
+            'current_page': response.data['current_page'],
+            'last_page': response.data['last_page'],
+            'total': response.data['total'],
+          },
+        };
       } else {
         throw Exception('Failed to load providers');
       }
@@ -87,6 +135,7 @@ class ProviderRepository {
     required String time, // Format "HH:mm"
     required String description,
     int? competanceId,
+    String? otherService,
     double? latitude,
     double? longitude,
   }) async {
@@ -98,6 +147,7 @@ class ProviderRepository {
         'requested_date': fullDateTime,
         'description': description,
         if (competanceId != null) 'competance_id': competanceId,
+        if (otherService != null) 'other_service': otherService,
         'latitude': latitude,
         'longitude': longitude,
       };
@@ -207,6 +257,30 @@ class ProviderRepository {
     } catch (e) {
       // Silent error or print
       print("Loc update error: $e");
+    }
+  }
+
+  Future<void> uploadReservationPhotos({
+    required int reservationId,
+    required List<String> filePaths,
+    required String type, // 'before' or 'after'
+  }) async {
+    try {
+      final List<MultipartFile> files = [];
+      for (String path in filePaths) {
+        files.add(await MultipartFile.fromFile(path));
+      }
+
+      final formData = FormData.fromMap({'photos[]': files, 'type': type});
+
+      await _apiService.client.post(
+        '/reservations/$reservationId/photos',
+        data: formData,
+      );
+    } on DioException catch (e) {
+      throw Exception(
+        e.response?.data['message'] ?? 'Erreur lors de l\'upload des photos',
+      );
     }
   }
 

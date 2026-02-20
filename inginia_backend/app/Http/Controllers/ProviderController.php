@@ -29,6 +29,7 @@ class ProviderController extends Controller
                 'service_name' => $u->service_name, // pour les agences
                 'min_price' => $u->min_price,
                 'is_available' => $u->is_available,
+                'is_validated' => $u->is_validated,
             ]);
 
         return response()->json($providers);
@@ -175,7 +176,7 @@ class ProviderController extends Controller
 
     public function getFullDashboard($id)
     {
-        $provider = User::with(['competances', 'professions', 'portfolios'])->find($id);
+        $provider = User::with(['competances', 'professions', 'portfolios', 'availabilities'])->find($id);
         if (!$provider) {
             return response()->json(['error' => 'Prestataire introuvable'], 404);
         }
@@ -233,6 +234,7 @@ class ProviderController extends Controller
                 'min_price' => $provider->competances->min('price') ?? null,
                 'rating' => (float) round($provider->reviewsReceived()->avg('note') ?? 0, 1),
                 'professions' => $professions,
+                'is_validated' => $provider->is_validated,
             ],
             'competances' => $provider->competances,
             'portfolio' => $provider->portfolios->map(function($p) {
@@ -241,6 +243,8 @@ class ProviderController extends Controller
                     'image' => $p->image_path,
                     'title' => $p->title,
                     'description' => $p->description,
+                    'type' => $p->type,
+                    'reservation_id' => $p->reservation_id,
                 ];
             }),
             'stats' => [
@@ -251,6 +255,7 @@ class ProviderController extends Controller
             ],
             'reviews' => $reviews,
             'reservations' => $reservations,
+            'availabilities' => $provider->availabilities,
         ]);
     }
 

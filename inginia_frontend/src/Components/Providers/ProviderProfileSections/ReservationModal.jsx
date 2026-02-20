@@ -96,6 +96,22 @@ const ReservationModal = ({
                 <option value="other">Autre service...</option>
               </select>
             </label>
+
+            {reservationData.service_id === "other" && (
+              <label className="block text-gray-700 animate-fadeIn">
+                Précisez votre besoin :
+                <input
+                  type="text"
+                  name="other_service"
+                  value={reservationData.other_service}
+                  onChange={handleChange}
+                  placeholder="Ex: Réparation d'une fuite d'eau spécifique"
+                  className="w-full border p-2 rounded mt-1"
+                  required
+                />
+              </label>
+            )}
+
             <label className="block text-gray-700">
               Date :
               <input

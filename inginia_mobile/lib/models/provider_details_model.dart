@@ -1,10 +1,12 @@
 import 'user_model.dart';
+import 'availability_model.dart';
 
 class ProviderDetails {
   final User provider;
   final List<Competance> competances;
   final List<Review> reviews;
   final List<PortfolioItem> portfolio;
+  final List<Availability> availabilities;
   final int completedMissions;
   final Map<int, int> ratingDistribution;
 
@@ -13,6 +15,7 @@ class ProviderDetails {
     required this.competances,
     required this.reviews,
     required this.portfolio,
+    this.availabilities = const [],
     this.completedMissions = 0,
     this.ratingDistribution = const {1: 0, 2: 0, 3: 0, 4: 0, 5: 0},
   });
@@ -48,6 +51,11 @@ class ProviderDetails {
               ?.map((e) => PortfolioItem.fromJson(e))
               .toList() ??
           [],
+      availabilities:
+          (json['availabilities'] as List?)
+              ?.map((e) => Availability.fromJson(e))
+              .toList() ??
+          [],
     );
   }
 }
@@ -57,12 +65,16 @@ class PortfolioItem {
   final String image;
   final String? title;
   final String? description;
+  final String? type; // 'before' or 'after'
+  final int? reservationId;
 
   PortfolioItem({
     required this.id,
     required this.image,
     this.title,
     this.description,
+    this.type,
+    this.reservationId,
   });
 
   factory PortfolioItem.fromJson(Map<String, dynamic> json) {
@@ -71,6 +83,8 @@ class PortfolioItem {
       image: json['image'],
       title: json['title'],
       description: json['description'],
+      type: json['type'],
+      reservationId: json['reservation_id'],
     );
   }
 }
@@ -106,6 +120,8 @@ class Review {
   final String? comment;
   final String reviewerName; // We might need to map user relationship
   final DateTime createdAt;
+  final List<String> photos;
+  final String? providerResponse;
 
   Review({
     required this.id,
@@ -113,6 +129,8 @@ class Review {
     this.comment,
     required this.reviewerName,
     required this.createdAt,
+    this.photos = const [],
+    this.providerResponse,
   });
 
   factory Review.fromJson(Map<String, dynamic> json) {
@@ -124,6 +142,9 @@ class Review {
       comment: json['comment'],
       reviewerName: json['reviewer_name'] ?? 'Anonyme',
       createdAt: DateTime.parse(json['created_at']),
+      photos:
+          (json['photos'] as List?)?.map((e) => e.toString()).toList() ?? [],
+      providerResponse: json['provider_response'],
     );
   }
 }

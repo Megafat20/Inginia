@@ -14,17 +14,16 @@ class ApiService {
   // Configuration
   // -----------------------------------------------------------------------------
 
-  /// Détection automatique de l'URL du serveur selon la plateforme
+  /// Get just the host part (IP or domain)
+  static String get serverHost {
+    if (kIsWeb) return 'localhost';
+    if (Platform.isAndroid) return '192.168.10.187'; // Computer LAN IP
+    if (Platform.isWindows) return 'localhost';
+    return '127.0.0.1';
+  }
+
   static String get baseUrl {
-    if (kIsWeb) {
-      return 'http://localhost:8000/api';
-    }
-    // L'émulateur Android utilise 10.0.2.2 pour accéder au localhost de l'hôte
-    if (Platform.isAndroid) {
-      return 'http://10.0.2.2:8000/api';
-    }
-    // Pour iOS Simulator, Windows, macOS, Linux
-    return 'http://127.0.0.1:8000/api';
+    return 'http://$serverHost:8000/api';
   }
 
   // NOTE: Sur un appareil physique, vous devez remplacer l'URL ci-dessus par l'IP de votre PC (ex: 192.168.1.x)
@@ -41,8 +40,8 @@ class ApiService {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
       },
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 10),
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 30),
     ),
   );
 

@@ -9,12 +9,21 @@ class AuthRepository {
   // 1. Authentication (Login & Registration)
   // -----------------------------------------------------------------------------
 
-  Future<User?> login(String email, String password) async {
+  Future<User?> login({
+    String? email,
+    String? phone,
+    required String password,
+    bool rememberMe = false,
+  }) async {
     try {
-      final response = await _apiService.client.post(
-        '/login',
-        data: {'email': email, 'password': password},
-      );
+      final Map<String, dynamic> data = {
+        'password': password,
+        'remember_me': rememberMe,
+      };
+      if (email != null) data['email'] = email;
+      if (phone != null) data['phone'] = phone;
+
+      final response = await _apiService.client.post('/login', data: data);
 
       if (response.statusCode == 200) {
         final data = response.data;
@@ -25,21 +34,53 @@ class AuthRepository {
             value: data['token'],
           );
         }
+        if (data['refresh_token'] != null) {
+          await _apiService.storage.write(
+            key: 'refresh_token',
+            value: data['refresh_token'],
+          );
+        }
         return User.fromJson(data['user']);
       }
     } on DioException catch (e) {
-      if (e.response != null) {
+      if (e.response != null && e.response?.data is Map) {
         throw Exception(e.response?.data['error'] ?? 'Erreur de connexion');
+      }
+      throw Exception('Impossible de joindre le serveur ou erreur interne');
+    }
+    return null;
+  }
+
+  Future<User?> loginWithGoogle(String idToken) async {
+    try {
+      final response = await _apiService.client.post(
+        '/auth/google',
+        data: {'credential': idToken},
+      );
+
+      if (response.statusCode == 200) {
+        final data = response.data;
+        if (data['token'] != null) {
+          await _apiService.storage.write(
+            key: 'auth_token',
+            value: data['token'],
+          );
+        }
+        return User.fromJson(data['user']);
+      }
+    } on DioException catch (e) {
+      if (e.response != null && e.response?.data is Map) {
+        throw Exception(e.response?.data['error'] ?? 'Erreur Google Login');
       }
       throw Exception('Impossible de joindre le serveur');
     }
     return null;
   }
 
-  Future<User?> register({
+  Future<Map<String, dynamic>> register({
     required String name,
-    required String email,
     required String password,
+    String? email,
     String? phone,
     String? role, // 'client' or 'prestataire'
     bool? isAgency,
@@ -55,11 +96,12 @@ class AuthRepository {
     try {
       // Build form data (matching React's FormData approach)
       final Map<String, dynamic> data = {
-        'email': email,
         'password': password,
-        'phone': phone ?? '',
         'role': role ?? 'client',
       };
+
+      if (email != null && email.isNotEmpty) data['email'] = email;
+      if (phone != null && phone.isNotEmpty) data['phone'] = phone;
 
       if (role == 'prestataire') {
         data['name'] =
@@ -100,16 +142,54 @@ class AuthRepository {
             value: responseData['token'],
           );
         }
-        return User.fromJson(responseData['user']);
+
+        return {
+          'user': User.fromJson(responseData['user']),
+          'requireVerification': responseData['require_verification'] ?? false,
+          'message': responseData['message'],
+        };
       }
     } on DioException catch (e) {
-      if (e.response != null) {
-        final msg = e.response?.data['message'] ?? 'Erreur d\'inscription';
+      if (e.response != null && e.response?.data is Map) {
+        final msg =
+            e.response?.data['message'] ??
+            e.response?.data['error'] ??
+            'Erreur d\'inscription';
         throw Exception(msg);
       }
       throw Exception('Impossible de joindre le serveur');
     }
-    return null;
+    return {};
+  }
+
+  Future<void> sendOtp(String identifier, String type) async {
+    try {
+      await _apiService.client.post(
+        '/otp/send',
+        data: {'identifier': identifier, 'type': type},
+      );
+    } on DioException catch (e) {
+      String errorMsg = 'Erreur lors de l\'envoi du code';
+      if (e.response != null && e.response?.data is Map) {
+        errorMsg = e.response?.data['error'] ?? errorMsg;
+      }
+      throw Exception(errorMsg);
+    }
+  }
+
+  Future<void> verifyOtp(String identifier, String code, String type) async {
+    try {
+      await _apiService.client.post(
+        '/otp/verify',
+        data: {'identifier': identifier, 'code': code, 'type': type},
+      );
+    } on DioException catch (e) {
+      String errorMsg = 'Code invalide ou expiré';
+      if (e.response != null && e.response?.data is Map) {
+        errorMsg = e.response?.data['error'] ?? errorMsg;
+      }
+      throw Exception(errorMsg);
+    }
   }
 
   Future<void> logout() async {
@@ -186,7 +266,16 @@ class AuthRepository {
       if (response.statusCode == 200) {
         return await getMe();
       }
-    } catch (_) {}
+    } on DioException catch (e) {
+      if (e.response != null && e.response?.data is Map) {
+        throw Exception(
+          e.response?.data['message'] ??
+              e.response?.data['error'] ??
+              'Erreur lors de la mise à jour',
+        );
+      }
+      throw Exception('Impossible de joindre le serveur');
+    }
     return null;
   }
 }

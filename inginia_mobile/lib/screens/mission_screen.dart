@@ -9,6 +9,7 @@ import '../widgets/shimmer_loading.dart';
 import '../widgets/review_dialog.dart';
 import '../providers/auth_provider.dart';
 import '../services/websocket_service.dart';
+import 'components/mission_details_modal.dart';
 
 class MissionScreen extends StatefulWidget {
   final int? initialReservationId;
@@ -354,126 +355,158 @@ class _MissionScreenState extends State<MissionScreen>
       ),
       child: Column(
         children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
+          InkWell(
+            onTap: () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => MissionDetailsModal(
+                  reservation: r,
+                  onUpdate: () {
+                    // Force refresh when modal triggers update
+                    _fetchReservations();
+                  },
+                ),
+              );
+            },
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            child: Column(
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
+                // Header
+                Padding(
+                  padding: const EdgeInsets.all(16),
                   child: Row(
-                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Container(
-                        width: 6,
-                        height: 6,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
-                          color: statusColor,
-                          shape: BoxShape.circle,
+                          color: statusColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: statusColor,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              statusLabel,
+                              style: TextStyle(
+                                color: statusColor,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        "${r.requestedDate.day}/${r.requestedDate.month} à ${r.requestedDate.hour}h${r.requestedDate.minute.toString().padLeft(2, '0')}",
+                        style: TextStyle(
+                          color: Colors.grey.shade500,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                        statusLabel,
-                        style: TextStyle(
-                          color: statusColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
+                      Icon(
+                        Icons.info_outline,
+                        size: 16,
+                        color: Colors.grey.shade400,
                       ),
                     ],
                   ),
                 ),
-                const Spacer(),
-                Text(
-                  "${r.requestedDate.day}/${r.requestedDate.month} à ${r.requestedDate.hour}h${r.requestedDate.minute.toString().padLeft(2, '0')}",
-                  style: TextStyle(
-                    color: Colors.grey.shade500,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
 
-          const Divider(height: 1, indent: 16, endIndent: 16),
+                const Divider(height: 1, indent: 16, endIndent: 16),
 
-          // Provider & Service Info
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CircleAvatar(
-                  radius: 28,
-                  backgroundColor: AppTheme.primary.withOpacity(0.1),
-                  backgroundImage: r.providerPhoto != null
-                      ? NetworkImage(r.providerPhoto!)
-                      : null,
-                  child: r.providerPhoto == null
-                      ? Text(
-                          r.providerName.isNotEmpty ? r.providerName[0] : '?',
-                          style: const TextStyle(
-                            color: AppTheme.primary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 20,
-                          ),
-                        )
-                      : null,
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
+                // Provider & Service Info
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        r.serviceTitle,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.textDark,
-                          height: 1.2,
-                        ),
+                      CircleAvatar(
+                        radius: 28,
+                        backgroundColor: AppTheme.primary.withOpacity(0.1),
+                        backgroundImage: r.providerPhoto != null
+                            ? NetworkImage(r.providerPhoto!)
+                            : null,
+                        child: r.providerPhoto == null
+                            ? Text(
+                                r.providerName.isNotEmpty
+                                    ? r.providerName[0]
+                                    : '?',
+                                style: const TextStyle(
+                                  color: AppTheme.primary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 20,
+                                ),
+                              )
+                            : null,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        r.providerName,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey.shade600,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      if (r.price != null) ...[
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.grey.shade200),
-                          ),
-                          child: Text(
-                            "${r.price} F",
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w900,
-                              color: AppTheme.textDark,
-                              fontSize: 12,
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              r.serviceTitle,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                color: AppTheme.textDark,
+                                height: 1.2,
+                              ),
                             ),
-                          ),
+                            const SizedBox(height: 4),
+                            Text(
+                              r.providerName,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey.shade600,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            if (r.price != null) ...[
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade50,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: Colors.grey.shade200,
+                                  ),
+                                ),
+                                child: Text(
+                                  "${r.price} F",
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    color: AppTheme.textDark,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
-                      ],
+                      ),
+                      const Icon(Icons.chevron_right, color: Colors.grey),
                     ],
                   ),
                 ),

@@ -33,7 +33,7 @@ class ReservationCreated implements ShouldBroadcast
     {
         // Broadcast specifically to the provider's private channel
         return [
-            new PrivateChannel('private-user.' . $this->reservation->provider_id),
+            new PrivateChannel('user.' . $this->reservation->provider_id),
         ];
     }
 

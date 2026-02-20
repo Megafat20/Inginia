@@ -11,6 +11,7 @@ use App\Models\Message;
 use Illuminate\Support\Facades\Auth;
 use App\Services\FcmService;
 use App\Events\MessageSent;
+use App\Models\Portfolio;
 
 class ReservationController extends Controller
 {
@@ -147,34 +148,17 @@ class ReservationController extends Controller
         $commissionRate = 0.05; // 5%
         $commission = max(200, $servicePrice * $commissionRate); // Minimum 200 FCFA
 
-        // ⚠️ Vérifier si le prestataire a assez de solde
-        if ($provider->balance < $commission) {
-            // 🚫 SOLDE INSUFFISANT : Bloquer le prestataire
-            $provider->is_available = false; // Plus de nouvelles missions
-            $provider->save();
+        // 💸 Déduction systématique (permet le solde négatif)
+        $provider->balance -= $commission;
 
-            // Créer la transaction en "pending" (dette)
-            \App\Models\Transaction::create([
-                'user_id' => $provider->id,
-                'type' => 'debit',
-                'amount' => $commission,
-                'status' => 'pending',
-                'payment_method' => 'system',
-                'reference' => 'COMM_' . $reservation->id,
-                'description' => "Commission Inginia - Mission #{$reservation->id} (⚠️ SOLDE INSUFFISANT - Compte bloqué)",
-            ]);
-
-            // 🔔 TODO: Notifier le prestataire
-            // "Votre compte est bloqué. Rechargez pour continuer à recevoir des missions."
-            
-            return;
+        // 🔒 Si le solde est nul ou négatif, on désactive le prestataire
+        if ($provider->balance <= 0) {
+            $provider->is_available = false;
         }
 
-        // ✅ Solde suffisant : Déduction normale
-        $provider->balance -= $commission;
         $provider->save();
 
-        // 📝 Enregistrement de la transaction
+        // 📝 Enregistrement de la transaction (toujours complétée car déduite du solde)
         \App\Models\Transaction::create([
             'user_id' => $provider->id,
             'type' => 'debit',
@@ -182,7 +166,7 @@ class ReservationController extends Controller
             'status' => 'completed',
             'payment_method' => 'system',
             'reference' => 'COMM_' . $reservation->id,
-            'description' => "Commission Inginia - Mission #{$reservation->id}",
+            'description' => "Commission Inginia - Mission #{$reservation->id}" . ($provider->balance < 0 ? " (Compte en découvert)" : ""),
         ]);
     }
 
@@ -294,6 +278,7 @@ class ReservationController extends Controller
         $request->validate([
             'content' => 'nullable|string',
             'image' => 'nullable|image|max:5000', // max 5MB
+            'audio' => 'nullable|file|mimes:mp3,wav,m4a,aac,oga,mp4|max:10000', // max 10MB
         ]);
 
         $imageUrl = null;
@@ -302,11 +287,18 @@ class ReservationController extends Controller
             $imageUrl = $path;
         }
 
+        $audioUrl = null;
+        if ($request->hasFile('audio')) {
+            $path = $request->file('audio')->store('chat/audio', 'public');
+            $audioUrl = $path;
+        }
+
         $message = Message::create([
             'reservation_id' => $reservationId,
             'sender_id' => auth()->id(),
             'message' => $request->input('content'),
             'image_url' => $imageUrl,
+            'audio_url' => $audioUrl,
         ]);
 
         broadcast(new MessageSent($message))->toOthers();
@@ -332,26 +324,41 @@ class ReservationController extends Controller
         ]);
 
         $reservation = Reservation::findOrFail($id);
+        $user = auth()->user();
 
-        if ($reservation->provider_id !== Auth::id()) {
-            return response()->json(['error' => 'Non autorisé'], 403);
+        if ($reservation->provider_id === $user->id) {
+            // Prestataire qui bouge
+            $reservation->update([
+                'provider_lat' => $request->latitude,
+                'provider_lng' => $request->longitude,
+            ]);
+
+            broadcast(new \App\Events\ProviderLocationUpdated(
+                $user->id,
+                $reservation->id,
+                $request->latitude,
+                $request->longitude
+            ))->toOthers();
+
+            return response()->json(['status' => 'ok', 'role' => 'provider']);
+        } elseif ($reservation->client_id === $user->id) {
+            // Client qui bouge
+            $reservation->update([
+                'client_lat' => $request->latitude,
+                'client_lng' => $request->longitude,
+            ]);
+
+            broadcast(new \App\Events\ClientLocationUpdated(
+                $user->id,
+                $reservation->id,
+                $request->latitude,
+                $request->longitude
+            ))->toOthers();
+
+            return response()->json(['status' => 'ok', 'role' => 'client']);
         }
 
-        // Sauvegarder la position dans la base de données
-        $reservation->update([
-            'provider_lat' => $request->latitude,
-            'provider_lng' => $request->longitude,
-        ]);
-
-        // Diffuser la nouvelle position via WebSocket (Pusher/Reverb)
-        broadcast(new \App\Events\ProviderLocationUpdated(
-            Auth::id(),
-            $reservation->id,
-            $request->latitude,
-            $request->longitude
-        ))->toOthers();
-
-        return response()->json(['status' => 'ok']);
+        return response()->json(['error' => 'Non autorisé'], 403);
     }
 
 
@@ -371,4 +378,39 @@ class ReservationController extends Controller
         return response()->json(['reservations' => $reservations]);
     }
 
+    public function uploadPhotos(Request $request, $id)
+    {
+        $request->validate([
+            'photos' => 'required|array',
+            'photos.*' => 'image|max:5120',
+            'type' => 'required|in:before,after',
+        ]);
+
+        $reservation = Reservation::findOrFail($id);
+        $user = auth()->user();
+
+        if ($reservation->provider_id !== $user->id) {
+            return response()->json(['error' => 'Non autorisé'], 403);
+        }
+
+        $uploadedPhotos = [];
+        foreach ($request->file('photos') as $photo) {
+            $path = $photo->store('portfolios', 'public');
+            
+            $portfolio = Portfolio::create([
+                'provider_id' => $user->id,
+                'reservation_id' => $reservation->id,
+                'image_path' => basename($path),
+                'type' => $request->type,
+                'title' => ($request->type === 'before' ? 'Avant : ' : 'Après : ') . ($reservation->competance->name ?? 'Service'),
+                'description' => "Photo " . $request->type . " réalisée pour " . ($reservation->client->name ?? 'un client'),
+            ]);
+            $uploadedPhotos[] = $portfolio;
+        }
+
+        return response()->json([
+            'message' => 'Photos ajoutées au portfolio',
+            'photos' => $uploadedPhotos
+        ]);
+    }
 }

@@ -28,7 +28,8 @@ class _ProviderHomeTabEnhancedState extends State<ProviderHomeTabEnhanced> {
   @override
   void initState() {
     super.initState();
-    _refresh();
+    _futureReservations = _repository.getMyReservationsAsProvider();
+    _futureStats = _repository.getProviderStats();
   }
 
   @override
@@ -94,11 +95,11 @@ class _ProviderHomeTabEnhancedState extends State<ProviderHomeTabEnhanced> {
 
   @override
   Widget build(BuildContext context) {
-    final user = context.watch<AuthProvider>().user;
+    final user = context.select<AuthProvider, dynamic>((auth) => auth.user);
 
-    return Scaffold(
-      backgroundColor: AppTheme.background,
-      body: RefreshIndicator(
+    return Material(
+      color: AppTheme.background,
+      child: RefreshIndicator(
         onRefresh: () async => _refresh(),
         child: CustomScrollView(
           slivers: [
@@ -106,10 +107,10 @@ class _ProviderHomeTabEnhancedState extends State<ProviderHomeTabEnhanced> {
             SliverToBoxAdapter(
               child: Container(
                 padding: const EdgeInsets.only(
-                  top: 60,
+                  top: 50,
                   left: 20,
                   right: 20,
-                  bottom: 40,
+                  bottom: 25,
                 ),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -267,8 +268,10 @@ class _ProviderHomeTabEnhancedState extends State<ProviderHomeTabEnhanced> {
                       .where((r) => r.status == 'pending')
                       .length;
                   final accepted = reservations
-                      .where((r) => r.status == 'accepted' ||
-                          r.status == 'in_progress')
+                      .where(
+                        (r) =>
+                            r.status == 'accepted' || r.status == 'in_progress',
+                      )
                       .length;
                   final completed = reservations
                       .where((r) => r.status == 'completed')

@@ -37,8 +37,9 @@ class SOSController extends Controller
             \Illuminate\Support\Facades\Log::error("Erreur Broadcast SOS: " . $e->getMessage());
         }
 
-        // 🔔 Envoyer une notification Push aux prestataires à proximité (10km)
+        // 🔔 Envoyer une notification Push aux prestataires à proximité (10km) et DISPONIBLES
         $providers = \App\Models\User::where('role', 'prestataire')
+            ->where('is_available', true)
             ->avecDistance($request->latitude, $request->longitude)
             ->whereRaw("(6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude)))) <= 10", [$request->latitude, $request->longitude, $request->latitude])
             ->get();
@@ -51,7 +52,7 @@ class SOSController extends Controller
                         $tokens->toArray(),
                         "🚨 URGENCE SOS : " . $request->problem_type,
                         "Un client a besoin d'aide immédiatement près de chez vous.",
-                        array_merge($data, ['type' => 'sos'])
+                        array_merge($data, ['type' => 'urgent_request'])
                     );
                 } catch (\Exception $e) {
                     \Illuminate\Support\Facades\Log::error("Erreur FCM SOS: " . $e->getMessage());
@@ -64,6 +65,7 @@ class SOSController extends Controller
             'data' => $data
         ]);
     }
+
     public function accept(Request $request)
     {
         $request->validate([
@@ -74,6 +76,14 @@ class SOSController extends Controller
         ]);
 
         $provider = Auth::user();
+
+        // 🔒 SECURITY: Le prestataire ne peut pas accepter de mission SOS si son solde est <= 0
+        if ($provider->balance <= 0) {
+            return response()->json([
+                'error' => 'Solde insuffisant',
+                'message' => 'Votre portefeuille est vide. Veuillez recharger votre compte pour accepter cette mission.'
+            ], 403);
+        }
 
         // Créer une réservation immédiate
         $reservation = \App\Models\Reservation::create([

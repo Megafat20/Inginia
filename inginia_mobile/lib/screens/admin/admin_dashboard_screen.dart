@@ -19,6 +19,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   final AdminService _adminService = AdminService();
   Map<String, dynamic>? _stats;
   bool _loading = true;
+  String _selectedPeriod = 'month';
 
   @override
   void initState() {
@@ -27,8 +28,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Future<void> _loadStats() async {
+    setState(() => _loading = true);
     try {
-      final stats = await _adminService.getDashboardStats();
+      final stats = await _adminService.getDashboardStats(
+        period: _selectedPeriod,
+      );
       setState(() {
         _stats = stats;
         _loading = false;
@@ -36,333 +40,504 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     } catch (e) {
       setState(() => _loading = false);
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Erreur: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+        );
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final kpi = _stats?['kpi'];
+
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [AppTheme.primary, AppTheme.primary.withOpacity(0.8)],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Header
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Tableau de Bord',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 28,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          Text(
-                            'Administration',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
+      resizeToAvoidBottomInset: false,
+      backgroundColor: AppTheme.background,
+      body: CustomScrollView(
+        slivers: [
+          // Premium Header
+          SliverAppBar(
+            expandedHeight: 180,
+            floating: false,
+            pinned: true,
+            backgroundColor: AppTheme.primary,
+            elevation: 0,
+            flexibleSpace: FlexibleSpaceBar(
+              background: ExcludeSemantics(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [AppTheme.primary, AppTheme.primaryDark],
                     ),
-                    Row(
-                      children: [
-                        IconButton(
-                          onPressed: _loadStats,
-                          icon: Icon(Icons.refresh, color: Colors.white),
-                          tooltip: 'Actualiser',
+                  ),
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        top: -50,
+                        right: -50,
+                        child: Container(
+                          width: 200,
+                          height: 200,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.1),
+                            shape: BoxShape.circle,
+                          ),
                         ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          onPressed: () {
-                            showDialog(
-                              context: context,
-                              builder: (ctx) => AlertDialog(
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Tableau de Bord',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 32,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            Text(
+                              'Vue d\'ensemble • ${_selectedPeriod == 'day'
+                                  ? 'Aujourd\'hui'
+                                  : _selectedPeriod == 'week'
+                                  ? 'Cette semaine'
+                                  : _selectedPeriod == 'month'
+                                  ? 'Ce mois'
+                                  : 'Cette année'}',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.8),
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            actions: [
+              IconButton(
+                onPressed: _loadStats,
+                icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+              ),
+              IconButton(
+                onPressed: () => _showLogoutDialog(context),
+                icon: const Icon(Icons.logout_rounded, color: Colors.white),
+              ),
+              const SizedBox(width: 8),
+            ],
+          ),
+
+          // Period Selector & Content
+          SliverToBoxAdapter(
+            child: ExcludeSemantics(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Period Selector Chips
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: ['day', 'week', 'month', 'year'].map((p) {
+                            bool isSelected = _selectedPeriod == p;
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: ChoiceChip(
+                                label: Text(
+                                  p == 'day'
+                                      ? 'Jour'
+                                      : p == 'week'
+                                      ? 'Semaine'
+                                      : p == 'month'
+                                      ? 'Mois'
+                                      : 'Année',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : AppTheme.textSecondary,
+                                  ),
+                                ),
+                                selected: isSelected,
+                                onSelected: (val) {
+                                  if (val) {
+                                    setState(() => _selectedPeriod = p);
+                                    _loadStats();
+                                  }
+                                },
+                                selectedColor: AppTheme.primary,
+                                backgroundColor: Colors.white,
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                title: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.logout_rounded,
-                                      color: Colors.red,
-                                    ),
-                                    SizedBox(width: 12),
-                                    Text('Déconnexion'),
-                                  ],
-                                ),
-                                content: Text(
-                                  'Êtes-vous sûr de vouloir vous déconnecter ?',
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(ctx),
-                                    child: Text('Annuler'),
+                                  borderRadius: BorderRadius.circular(12),
+                                  side: BorderSide(
+                                    color: isSelected
+                                        ? AppTheme.primary
+                                        : Colors.grey.shade200,
                                   ),
-                                  ElevatedButton(
-                                    onPressed: () {
-                                      Navigator.pop(ctx);
-                                      context.read<AuthProvider>().logout();
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.red,
-                                      foregroundColor: Colors.white,
-                                    ),
-                                    child: Text('Se déconnecter'),
-                                  ),
-                                ],
+                                ),
+                                showCheckmark: false,
                               ),
                             );
-                          },
-                          icon: Icon(Icons.logout_rounded, color: Colors.white),
-                          tooltip: 'Se déconnecter',
+                          }).toList(),
                         ),
-                      ],
+                      ),
                     ),
+
+                    const SizedBox(height: 24),
+
+                    if (_loading)
+                      const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(40),
+                          child: CircularProgressIndicator(),
+                        ),
+                      )
+                    else ...[
+                      // KPI Cards Grid
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: GridView.count(
+                          crossAxisCount: 2,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          mainAxisSpacing: 16,
+                          crossAxisSpacing: 16,
+                          childAspectRatio: 1,
+                          children: [
+                            _buildPremiumKpiCard(
+                              'Utilisateurs',
+                              '${kpi?['users']?['total'] ?? 0}',
+                              num.tryParse(
+                                    kpi?['users']?['variation']?.toString() ??
+                                        '0',
+                                  ) ??
+                                  0,
+                              Icons.people_alt_rounded,
+                              Colors.blue,
+                            ),
+                            _buildPremiumKpiCard(
+                              'Missions',
+                              '${kpi?['missions']?['total'] ?? 0}',
+                              num.tryParse(
+                                    kpi?['missions']?['variation']
+                                            ?.toString() ??
+                                        '0',
+                                  ) ??
+                                  0,
+                              Icons.assignment_turned_in_rounded,
+                              Colors.green,
+                            ),
+                            _buildPremiumKpiCard(
+                              'Revenus',
+                              '${(num.tryParse(kpi?['revenue']?['total']?.toString() ?? '0') ?? 0).toStringAsFixed(0)} F',
+                              num.tryParse(
+                                    kpi?['revenue']?['variation']?.toString() ??
+                                        '0',
+                                  ) ??
+                                  0,
+                              Icons.account_balance_wallet_rounded,
+                              Colors.orange,
+                            ),
+                            _buildPremiumKpiCard(
+                              'Note Moy.',
+                              '${kpi?['rating']?['average'] ?? '0.0'}',
+                              num.tryParse(
+                                    kpi?['rating']?['variation']?.toString() ??
+                                        '0',
+                                  ) ??
+                                  0,
+                              Icons.star_rounded,
+                              Colors.purple,
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 32),
+
+                      // Quick Actions
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Actions Administratives',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                color: AppTheme.textDark,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Alerts Card
+                            if ((_stats?['alerts']?['pending_providers'] ?? 0) >
+                                0)
+                              _buildAlertCard(
+                                'Validations en attente',
+                                '${_stats?['alerts']?['pending_providers']} nouveaux prestataires à vérifier',
+                                Icons.notification_important_rounded,
+                                () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const ProviderValidationScreen(),
+                                  ),
+                                ),
+                              ),
+
+                            const SizedBox(height: 12),
+
+                            _buildActionCard(
+                              'Utilisateurs',
+                              'Gérer les accès et bannir',
+                              Icons.manage_accounts_rounded,
+                              Colors.blue,
+                              () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const UsersManagementScreen(),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            _buildActionCard(
+                              'Prestataires',
+                              'Répertoire complet',
+                              Icons.business_center_rounded,
+                              Colors.indigo,
+                              () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const AdminProvidersScreen(),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            _buildActionCard(
+                              'Commissions',
+                              'Suivi et décaissage',
+                              Icons.payments_rounded,
+                              Colors.green,
+                              () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      const AdminCommissionsScreen(),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 40),
+                    ],
                   ],
                 ),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-              // Content
-              Expanded(
-                child: Container(
+  void _showLogoutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Déconnexion'),
+        content: const Text('Voulez-vous vraiment vous déconnecter ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              context.read<AuthProvider>().logout();
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Déconnecter'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPremiumKpiCard(
+    String title,
+    String value,
+    num variation,
+    IconData icon,
+    Color color,
+  ) {
+    bool isPositive = variation >= 0;
+
+    return ExcludeSemantics(
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppTheme.background,
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(30),
-                      topRight: Radius.circular(30),
-                    ),
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: _loading
-                      ? Center(child: CircularProgressIndicator())
-                      : RefreshIndicator(
-                          onRefresh: _loadStats,
-                          child: ListView(
-                            padding: EdgeInsets.all(20),
-                            children: [
-                              // Stats Grid
-                              GridView.count(
-                                crossAxisCount: 2,
-                                shrinkWrap: true,
-                                physics: NeverScrollableScrollPhysics(),
-                                mainAxisSpacing: 16,
-                                crossAxisSpacing: 16,
-                                childAspectRatio: 1.1,
-                                children: [
-                                  _buildStatCard(
-                                    'Total Utilisateurs',
-                                    '${_stats?['total_users'] ?? 0}',
-                                    Icons.people,
-                                    Colors.blue,
-                                  ),
-                                  _buildStatCard(
-                                    'Clients',
-                                    '${_stats?['total_clients'] ?? 0}',
-                                    Icons.person,
-                                    Colors.green,
-                                  ),
-                                  _buildStatCard(
-                                    'Prestataires Validés',
-                                    '${_stats?['validated_providers'] ?? 0}',
-                                    Icons.verified_user,
-                                    Colors.purple,
-                                  ),
-                                  _buildStatCard(
-                                    'En Attente',
-                                    '${_stats?['pending_providers'] ?? 0}',
-                                    Icons.pending_actions,
-                                    Colors.orange,
-                                    highlight:
-                                        (_stats?['pending_providers'] ?? 0) > 0,
-                                  ),
-                                  _buildStatCard(
-                                    'Total Prestataires',
-                                    '${_stats?['total_providers'] ?? 0}',
-                                    Icons.business_center,
-                                    Colors.indigo,
-                                  ),
-                                  _buildStatCard(
-                                    'Agences',
-                                    '${_stats?['total_agencies'] ?? 0}',
-                                    Icons.business,
-                                    Colors.pink,
-                                  ),
-                                ],
-                              ),
-
-                              SizedBox(height: 32),
-
-                              // Actions Rapides
-                              Text(
-                                'Actions Rapides',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w900,
-                                  color: AppTheme.textDark,
-                                ),
-                              ),
-
-                              SizedBox(height: 16),
-
-                              _buildActionCard(
-                                'Validation Prestataires',
-                                '${_stats?['pending_providers'] ?? 0} demande(s) en attente',
-                                Icons.check_circle,
-                                Colors.orange,
-                                () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          ProviderValidationScreen(),
-                                    ),
-                                  );
-                                },
-                                highlight:
-                                    (_stats?['pending_providers'] ?? 0) > 0,
-                              ),
-
-                              SizedBox(height: 12),
-
-                              _buildActionCard(
-                                'Gestion Utilisateurs',
-                                'Voir tous les utilisateurs',
-                                Icons.manage_accounts,
-                                Colors.blue,
-                                () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          UsersManagementScreen(),
-                                    ),
-                                  );
-                                },
-                              ),
-
-                              SizedBox(height: 12),
-
-                              _buildActionCard(
-                                'Gestion Commissions',
-                                'Décaisser et gérer les commissions',
-                                Icons.account_balance_wallet_rounded,
-                                Colors.green,
-                                () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          AdminCommissionsScreen(),
-                                    ),
-                                  );
-                                },
-                              ),
-
-                              SizedBox(height: 12),
-
-                              _buildActionCard(
-                                'Tous les Prestataires',
-                                'Rechercher et gérer les prestataires',
-                                Icons.people_alt_rounded,
-                                Colors.purple,
-                                () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          AdminProvidersScreen(),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
+                  child: Icon(icon, color: color, size: 20),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: (isPositive ? Colors.green : Colors.red).withOpacity(
+                      0.1,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isPositive
+                            ? Icons.arrow_upward_rounded
+                            : Icons.arrow_downward_rounded,
+                        color: isPositive ? Colors.green : Colors.red,
+                        size: 10,
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        '${variation.abs()}%',
+                        style: TextStyle(
+                          color: isPositive ? Colors.green : Colors.red,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
                         ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const Spacer(),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  color: AppTheme.textDark,
                 ),
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              title.toUpperCase(),
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                color: AppTheme.textSecondary.withOpacity(0.6),
+                letterSpacing: 0.5,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildStatCard(
+  Widget _buildAlertCard(
     String title,
-    String value,
+    String subtitle,
     IconData icon,
-    Color color, {
-    bool highlight = false,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: highlight ? Border.all(color: Colors.orange, width: 2) : null,
-        boxShadow: [
-          BoxShadow(
-            color: highlight
-                ? Colors.orange.withOpacity(0.3)
-                : Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: Offset(0, 4),
+    VoidCallback onTap,
+  ) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.red.shade50, Colors.red.shade100.withOpacity(0.5)],
           ),
-        ],
-      ),
-      padding: EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.red.shade200, width: 1),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: Colors.red, size: 24),
             ),
-            child: Icon(icon, color: color, size: 24),
-          ),
-          Spacer(),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w900,
-              color: AppTheme.textDark,
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.red,
+                      fontSize: 15,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: TextStyle(color: Colors.red.shade800, fontSize: 12),
+                  ),
+                ],
+              ),
             ),
-          ),
-          SizedBox(height: 4),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey.shade600,
+            const Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 14,
+              color: Colors.red,
             ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -372,23 +547,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     String description,
     IconData icon,
     Color color,
-    VoidCallback onTap, {
-    bool highlight = false,
-  }) {
+    VoidCallback onTap,
+  ) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: EdgeInsets.all(20),
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: highlight ? color.withOpacity(0.1) : Colors.white,
+          color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: highlight ? Border.all(color: color, width: 2) : null,
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.05),
               blurRadius: 10,
-              offset: Offset(0, 4),
+              offset: const Offset(0, 4),
             ),
           ],
         ),
@@ -403,20 +576,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ),
               child: Icon(icon, color: color, size: 28),
             ),
-            SizedBox(width: 16),
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                       color: AppTheme.textDark,
                     ),
                   ),
-                  SizedBox(height: 4),
+                  const SizedBox(height: 4),
                   Text(
                     description,
                     style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
@@ -424,7 +597,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ],
               ),
             ),
-            Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+            const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
           ],
         ),
       ),

@@ -24,13 +24,18 @@ class DefaultFirebaseOptions {
     }
   }
 
-  static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAZ1xaMoALHFfp1oW9GTH3xkzRdWgGud0Y',
-    appId: '1:1042799065470:android:3d1c3ff21921ce0134db2f',
-    messagingSenderId: '1042799065470',
-    projectId: 'inginiaapp',
-    storageBucket: 'inginiaapp.firebasestorage.app',
-  );
+  static FirebaseOptions get android {
+    // Determine which App ID to use based on the flavor/package name
+    // This is a bit tricky in static const, so we convert it to a getter
+    return const FirebaseOptions(
+      apiKey: 'AIzaSyAZ1xaMoALHFfp1oW9GTH3xkzRdWgGud0Y',
+      appId:
+          '1:1042799065470:android:43affcf643c6bb2b34db2f', // Default to client
+      messagingSenderId: '1042799065470',
+      projectId: 'inginiaapp',
+      storageBucket: 'inginiaapp.firebasestorage.app',
+    );
+  }
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyAZ1xaMoALHFfp1oW9GTH3xkzRdWgGud0Y',

@@ -11,7 +11,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/websocket_service.dart';
 import '../../widgets/shimmer_loading.dart';
-import 'package:flutter_animate/flutter_animate.dart';
+import '../components/mission_details_modal.dart';
 
 class ProviderMissionsTab extends StatefulWidget {
   const ProviderMissionsTab({super.key});
@@ -57,6 +57,8 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
     }
   }
 
+  final Set<int> _listeningMissions = {};
+
   Future<void> _fetchMissions() async {
     try {
       final list = await _repository.getMyReservationsAsProvider();
@@ -66,13 +68,7 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
           _isLoading = false;
         });
         _checkTracking();
-
-        // Listen to specific mission updates
-        for (var res in list) {
-          WebSocketService().listenToReservationUpdates(res.id, (data) {
-            _fetchMissions();
-          });
-        }
+        _initMissionsWebSocket(list);
       }
     } catch (e) {
       if (mounted) {
@@ -80,6 +76,21 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
           _isLoading = false;
         });
       }
+    }
+  }
+
+  void _initMissionsWebSocket(List<Reservation> list) {
+    // Listen to specific mission updates
+    for (var res in list) {
+      if (_listeningMissions.contains(res.id)) continue;
+
+      // Only listen to active or pending missions
+      if (['completed', 'cancelled', 'declined'].contains(res.status)) continue;
+
+      _listeningMissions.add(res.id);
+      WebSocketService().listenToReservationUpdates(res.id, (data) {
+        _fetchMissions();
+      });
     }
   }
 
@@ -100,6 +111,46 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
     if (status == 'cancelled') {
       reason = await _showCancellationDialog();
       if (reason == null) return; // User cancelled the dialog
+    }
+
+    // Special flow for "completed" - prompt for photos
+    if (status == 'completed') {
+      final shouldUpload = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text("Félicitations !"),
+          content: const Text(
+            "Souhaitez-vous ajouter des photos de votre travail à votre portfolio avant de terminer ?",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("NON, TERMINER"),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text("OUI, AJOUTER DES PHOTOS"),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldUpload == true) {
+        // Find the reservation object to pass to the modal
+        final res = _reservations?.firstWhere((r) => r.id == id);
+        if (res != null) {
+          // Open details modal which has the photo upload buttons
+          // Status will need to be updated after or inside the modal
+          // For now, let's just proceed with status update and tell them to use details
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                "Ouvrez les détails de la mission pour ajouter les photos.",
+              ),
+            ),
+          );
+        }
+      }
     }
 
     try {
@@ -142,20 +193,22 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Annuler la mission"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text("Veuillez indiquer la raison de l'annulation :"),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(
-                hintText: "Ex: Empêchement de dernière minute...",
-                border: OutlineInputBorder(),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text("Veuillez indiquer la raison de l'annulation :"),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                decoration: const InputDecoration(
+                  hintText: "Ex: Empêchement de dernière minute...",
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
               ),
-              maxLines: 3,
-            ),
-          ],
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -189,24 +242,24 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
           child: SafeArea(
             bottom: false,
             child: Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Text(
                     "Gestion des Missions",
                     style: TextStyle(
-                      fontSize: 24,
+                      fontSize: 22,
                       fontWeight: FontWeight.w900,
                       color: AppTheme.textDark,
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
                   Container(
-                    height: 50,
+                    height: 44,
                     decoration: BoxDecoration(
                       color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(25),
+                      borderRadius: BorderRadius.circular(22),
                     ),
                     child: TabBar(
                       controller: _tabController,
@@ -248,9 +301,12 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
             builder: (context) {
               if (_isLoading && _reservations == null) {
                 return ListView.separated(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   itemCount: 5,
-                  separatorBuilder: (_, __) => const SizedBox(height: 16),
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
                   itemBuilder: (_, __) => const MissionCardShimmer(),
                 );
               }
@@ -305,25 +361,20 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primary.withOpacity(0.05),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.assignment_turned_in_rounded,
-                      size: 64,
-                      color: AppTheme.primary.withOpacity(0.2),
-                    ),
-                  )
-                  .animate(onPlay: (c) => c.repeat(reverse: true))
-                  .scale(
-                    begin: const Offset(0.9, 0.9),
-                    end: const Offset(1.1, 1.1),
-                    duration: 2.seconds,
-                    curve: Curves.easeInOut,
+              ExcludeSemantics(
+                child: Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withOpacity(0.05),
+                    shape: BoxShape.circle,
                   ),
+                  child: Icon(
+                    Icons.assignment_turned_in_rounded,
+                    size: 64,
+                    color: AppTheme.primary.withOpacity(0.2),
+                  ),
+                ),
+              ),
               const SizedBox(height: 24),
               const Text(
                 "Aucune mission ici",
@@ -332,12 +383,12 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
                   fontSize: 18,
                   fontWeight: FontWeight.w900,
                 ),
-              ).animate().fadeIn(duration: 400.ms),
+              ),
               const SizedBox(height: 8),
               Text(
                 "Vos prochaines missions apparaîtront ici.",
                 style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
-              ).animate().fadeIn(delay: 200.ms),
+              ),
               const SizedBox(height: 100),
             ],
           ),
@@ -349,15 +400,18 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
       onRefresh: _fetchMissions,
       color: AppTheme.primary,
       child: ListView.separated(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        addSemanticIndexes: false,
         itemCount: list.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 20),
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
           final r = list[index];
-          return _buildCard(r, isPending: isPending, isActive: isActive)
-              .animate(delay: (index * 50).ms)
-              .fadeIn(duration: 400.ms)
-              .slideY(begin: 0.1, end: 0);
+          return _buildCard(
+            r,
+            isPending: isPending,
+            isActive: isActive,
+            key: ValueKey(r.id),
+          );
         },
       ),
     );
@@ -367,17 +421,19 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
     Reservation r, {
     bool isPending = false,
     bool isActive = false,
+    Key? key,
   }) {
     return Container(
+      key: key,
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 15,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
@@ -430,6 +486,21 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
                       ),
                     ],
                   ),
+                ),
+                // Info Button
+                IconButton(
+                  icon: const Icon(Icons.info_outline, color: Colors.grey),
+                  onPressed: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (context) => MissionDetailsModal(
+                        reservation: r,
+                        onUpdate: _refresh,
+                      ),
+                    );
+                  },
                 ),
                 // Chat Button
                 Container(
@@ -527,11 +598,21 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () => _updateStatus(r.id, 'declined'),
-                      icon: const Icon(Icons.close, size: 18),
-                      label: const Text("Refuser"),
+                      icon: const Icon(Icons.close, size: 16),
+                      label: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          "Refuser",
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.red,
                         side: const BorderSide(color: Colors.red),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -542,11 +623,21 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () => _updateStatus(r.id, 'accepted'),
-                      icon: const Icon(Icons.check, size: 18),
-                      label: const Text("Accepter"),
+                      icon: const Icon(Icons.check, size: 16),
+                      label: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          "Accepter",
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green,
                         foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
                         elevation: 0,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),

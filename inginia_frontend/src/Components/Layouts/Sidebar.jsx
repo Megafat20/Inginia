@@ -10,6 +10,10 @@ import {
   FaQuestionCircle,
   FaChevronRight,
   FaHome,
+  FaUsers,
+  FaUserCheck,
+  FaMapMarkedAlt,
+  FaTachometerAlt,
 } from "react-icons/fa";
 import { useAuth } from "../Context/AuthContext";
 
@@ -17,23 +21,38 @@ const Sidebar = ({ isExpanded, onToggle }) => {
   const { user, logoutUser } = useAuth();
   const location = useLocation();
 
-  const menuItems = [
-    { path: "/", icon: <FaHome />, label: "Accueil" },
-    {
-      path: "/parametres/profile",
-      icon: <FaUserCircle />,
-      label: "Mon Profil",
-    },
-    { path: "/parametres/security", icon: <FaShieldAlt />, label: "Sécurité" },
-    { path: "/parametres/preferences", icon: <FaCog />, label: "Préférences" },
-    {
-      path: "/parametres/notifications",
-      icon: <FaBell />,
-      label: "Notifications",
-    },
-    { path: "/stats", icon: <FaChartLine />, label: "Analytiques" },
-    { path: "/help", icon: <FaQuestionCircle />, label: "Aide & Support" },
-  ];
+  const getMenuItems = () => {
+    let baseItems = [
+      { path: "/", icon: <FaHome />, label: "Accueil" },
+    ];
+
+    if (user?.role === "admin") {
+      baseItems = [
+        ...baseItems,
+        { path: "/admin", icon: <FaTachometerAlt />, label: "Dashboard Admin" },
+        { path: "/admin/users", icon: <FaUsers />, label: "Utilisateurs" },
+        { path: "/admin/providers/validation", icon: <FaUserCheck />, label: "Qualité & Docs" },
+        { path: "/admin/tracking", icon: <FaMapMarkedAlt />, label: "Suivi Live" },
+      ];
+    }
+
+    if (user?.role === "prestataire") {
+       baseItems.push({ path: "/providerdashboard", icon: <FaTachometerAlt />, label: "Tableau de Bord" });
+    }
+
+    if (user?.role === "client") {
+       baseItems.push({ path: "/clientdashboard", icon: <FaTachometerAlt />, label: "Mon Espace" });
+    }
+
+    return [
+      ...baseItems,
+      { path: "/parametres/profile", icon: <FaUserCircle />, label: "Mon Profil" },
+      // { path: "/stats", icon: <FaChartLine />, label: "Analytiques" },
+      { path: "/help", icon: <FaQuestionCircle />, label: "Aide & Support" },
+    ];
+  };
+
+  const menuItems = getMenuItems();
 
   return (
     <aside

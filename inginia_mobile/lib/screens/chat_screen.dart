@@ -1,16 +1,24 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:record/record.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import '../models/message_model.dart';
+import '../models/reservation_model.dart';
 import '../repositories/chat_repository.dart';
+import '../repositories/provider_repository.dart';
 import '../providers/auth_provider.dart';
 import '../services/websocket_service.dart';
 import '../services/push_notification_service.dart';
 import '../services/api_service.dart';
+import '../widgets/voice_note_bubble.dart';
 
 class ChatScreen extends StatefulWidget {
   final int reservationId;
@@ -30,19 +38,29 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final _repository = ChatRepository();
+  final _providerRepository = ProviderRepository();
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _picker = ImagePicker();
+  final _audioRecorder = AudioRecorder();
 
   List<Message> _messages = [];
   bool _isLoading = true;
   int? _currentUserId;
-  bool _isTyping = false; // Pour l'indicateur "en train d'écrire" interne
+  bool _isTyping = false;
+  bool _isRecording = false;
+  int _recordDuration = 0;
+  Timer? _recordTimer;
+  double _recordingDragOffset = 0.0;
+  bool _isCancelled = false;
+  bool _isUserHolding = false;
+  bool _isSending = false;
+  Reservation? _reservation;
+
   Timer? _typingTimer;
   Timer? _pollTimer;
   StreamSubscription? _notificationSubscription;
 
-  // Configuration WebSocket
   final _webSocketService = WebSocketService();
 
   @override
@@ -50,19 +68,19 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     _currentUserId = context.read<AuthProvider>().user?.id;
     _fetchMessages();
+    _fetchReservation();
     _initWebSocket();
-    // Fallback Polling (toutes les 5s) si le WebSocket échoue
     _pollTimer = Timer.periodic(
       const Duration(seconds: 5),
       (_) => _fetchMessages(silent: true),
     );
 
-    // Listen to Foreground Notifications (FCM) via local stream
     _notificationSubscription = PushNotificationService.messageStream.listen((
       data,
     ) {
       if (!mounted) return;
-      if (data['type'] == 'chat') {
+      final type = data['type'];
+      if (type == 'chat' || type == 'new_message') {
         final resId = data['reservation_id'];
         if (resId != null &&
             resId.toString() == widget.reservationId.toString()) {
@@ -76,27 +94,38 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _typingTimer?.cancel();
     _pollTimer?.cancel();
+    _recordTimer?.cancel();
     _notificationSubscription?.cancel();
     _controller.dispose();
     _scrollController.dispose();
-    // On ne ferme pas le WebSocketService car il est global, mais on pourrait se désabonner
+    _audioRecorder.dispose();
     super.dispose();
   }
 
+  Future<void> _fetchReservation() async {
+    try {
+      final res = await _providerRepository.getReservation(
+        widget.reservationId,
+      );
+      if (mounted) {
+        setState(() {
+          _reservation = res;
+        });
+      }
+    } catch (e) {
+      print("Erreur fetch reservation: $e");
+    }
+  }
+
   void _initWebSocket() {
-    // S'abonner au canal de chat
     _webSocketService.listenToChat(widget.reservationId, (data) {
       if (!mounted) return;
-
       final event = data['_event'];
-
-      // Nouveau message reçu (vérifie plusieurs possibilités de nommage)
       if (event == 'message.sent' ||
           event == '.message.sent' ||
           event == 'App\\Events\\MessageSent') {
         dynamic messageData = data['message'];
         if (messageData == null) messageData = data;
-
         try {
           final newMessage = Message.fromJson(messageData);
           if (!_messages.any((m) => m.id == newMessage.id)) {
@@ -110,8 +139,6 @@ class _ChatScreenState extends State<ChatScreen> {
           print("Erreur parsing message WebSocket: $e");
         }
       }
-
-      // Indicateur de frappe (typing)
       if (event == 'client-typing') {
         setState(() {
           _isTyping = true;
@@ -131,15 +158,19 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) {
         bool shouldScroll = false;
         if (_messages.length != msgs.length) {
-          // New messages detected
           shouldScroll = true;
         }
-
         setState(() {
-          _messages = msgs;
+          // Utiliser un Set pour éviter absolument les doublons lors du polling
+          final Set<int> existingIds = _messages.map((m) => m.id).toSet();
+          for (var m in msgs) {
+            if (!existingIds.contains(m.id)) {
+              _messages.add(m);
+              shouldScroll = true;
+            }
+          }
           _isLoading = false;
         });
-
         if (shouldScroll) _scrollToBottom();
       }
     } catch (e) {
@@ -151,7 +182,7 @@ class _ChatScreenState extends State<ChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent + 60, // Marge extra
+          _scrollController.position.maxScrollExtent + 60,
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
@@ -159,67 +190,185 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  Future<void> _startRecording() async {
+    try {
+      if (await _audioRecorder.hasPermission()) {
+        _isUserHolding = true;
+        _isCancelled = false;
+        _recordingDragOffset = 0;
+
+        // Immédiatement montrer l'interface d'enregistrement pour la réactivité
+        setState(() {
+          _isRecording = true;
+          _recordDuration = 0;
+        });
+
+        final dir = await getTemporaryDirectory();
+        final path =
+            '${dir.path}/voice_note_${DateTime.now().millisecondsSinceEpoch}.m4a';
+
+        await _audioRecorder.start(
+          const RecordConfig(
+            encoder: AudioEncoder.aacLc,
+            bitRate: 128000,
+            sampleRate: 44100,
+          ),
+          path: path,
+        );
+
+        HapticFeedback.mediumImpact();
+
+        // Si l'utilisateur a relâché pendant l'initialisation du recorder
+        if (!_isUserHolding) {
+          _stopAndSendRecording();
+          return;
+        }
+
+        _recordTimer?.cancel();
+        _recordTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+          if (mounted) {
+            setState(() {
+              _recordDuration++;
+            });
+          }
+        });
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Permission micro refusée")),
+        );
+      }
+    } catch (e) {
+      print("Erreur démarrage enregistrement: $e");
+      if (mounted) setState(() => _isRecording = false);
+    }
+  }
+
+  Future<void> _stopAndSendRecording({bool force = false}) async {
+    _isUserHolding = false;
+    if (!_isRecording && !force) return;
+
+    _recordTimer?.cancel();
+    _recordTimer = null;
+    HapticFeedback.lightImpact();
+
+    try {
+      String? path;
+      // On essaie d'arrêter le recorder quoi qu'il arrive
+      try {
+        path = await _audioRecorder.stop();
+      } catch (e) {
+        print("Erreur stop recorder: $e");
+      }
+
+      if (mounted) {
+        setState(() {
+          _isRecording = false;
+        });
+      }
+
+      if (!_isCancelled && path != null) {
+        await _sendAudioMessage(path);
+      } else if (path != null) {
+        final file = File(path);
+        if (await file.exists()) await file.delete();
+      }
+    } catch (e) {
+      print("Erreur globale arrêt: $e");
+    } finally {
+      // Sécurité absolue : on remet l'interface à zéro même si tout a planté
+      if (mounted) {
+        setState(() {
+          _isRecording = false;
+          _isUserHolding = false;
+        });
+      }
+    }
+  }
+
+  String _formatDuration(int seconds) {
+    final mins = seconds ~/ 60;
+    final secs = seconds % 60;
+    return "${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}";
+  }
+
+  Future<void> _sendAudioMessage(String path) async {
+    setState(() => _isSending = true);
+    try {
+      final newMessage = await _repository.sendMessage(
+        widget.reservationId,
+        null,
+        audioPath: path,
+      );
+      if (mounted) {
+        setState(() {
+          if (!_messages.any((m) => m.id == newMessage.id)) {
+            _messages.add(newMessage);
+          }
+          _isSending = false;
+        });
+        _scrollToBottom();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSending = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Échec de l'envoi de l'audio: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      final file = File(path);
+      if (await file.exists()) await file.delete();
+    }
+  }
+
   Future<void> _sendMessage() async {
     final text = _controller.text.trim();
-    if (text.isEmpty) return;
-
+    if (text.isEmpty || _isSending) return;
+    setState(() => _isSending = true);
     _controller.clear();
-
-    // UI Optimiste : Ajouter temporairement le message
-    /*
-    final tempMsg = Message(
-      id: -1, // ID temporaire
-      reservationId: widget.reservationId,
-      senderId: _currentUserId ?? 0,
-      content: text,
-      createdAt: DateTime.now(),
-    );
-    setState(() => _messages.add(tempMsg));
-    _scrollToBottom();
-    */
-
     try {
       final newMessage = await _repository.sendMessage(
         widget.reservationId,
         text,
       );
-      // Le WebSocket ajoutera le message confirmé, mais on l'ajoute ici pour l'instantanéité
       if (!_messages.any((m) => m.id == newMessage.id)) {
         setState(() {
           _messages.add(newMessage);
+          _isSending = false;
         });
         _scrollToBottom();
+      } else {
+        setState(() => _isSending = false);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Erreur d'envoi: $e"),
-          backgroundColor: Colors.red,
-        ),
-      );
+      setState(() => _isSending = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Erreur d'envoi: $e")));
     }
   }
 
-  String _getMessageImageUrl(String? path) {
+  String _getMediaUrl(String? path) {
     if (path == null) return "";
     if (path.startsWith('http')) return path;
     final apiBase = ApiService.baseUrl;
     final root = apiBase.replaceAll('/api', '');
-    // Laravel stores it in 'chat/filename.jpg' if we use ->store('chat', 'public')
     return '$root/storage/$path';
   }
 
   Future<void> _pickImage() async {
     final XFile? image = await _picker.pickImage(
       source: ImageSource.gallery,
-      imageQuality: 70, // Compresser un peu
+      imageQuality: 70,
     );
     if (image != null) {
       try {
-        // Optionnel : Afficher un indicateur de chargement d'image
         final newMessage = await _repository.sendMessage(
           widget.reservationId,
-          null, // Pas de texte, juste image
+          null,
           imagePath: image.path,
         );
         if (mounted) {
@@ -238,25 +387,96 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  void _showFullScreenImage(String url) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => Scaffold(
-          backgroundColor: Colors.black,
-          appBar: AppBar(
-            backgroundColor: Colors.black,
-            foregroundColor: Colors.white,
-          ),
-          body: Center(child: InteractiveViewer(child: Image.network(url))),
+  void _showCallChoices() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              "Passer un appel",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 24),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.phone_android, color: AppTheme.primary),
+              ),
+              title: const Text("Appel direct (GSM)"),
+              subtitle: const Text("Utiliser l'application téléphone"),
+              onTap: () {
+                Navigator.pop(ctx);
+                _makeDirectCall();
+              },
+            ),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.video_call, color: Colors.green),
+              ),
+              title: const Text("Appel via l'application"),
+              subtitle: const Text("Utiliser la connexion internet"),
+              onTap: () {
+                Navigator.pop(ctx);
+                // Prochainement...
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("Bientôt disponible sur l'application"),
+                    backgroundColor: AppTheme.primary,
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+          ],
         ),
       ),
     );
   }
 
+  Future<void> _makeDirectCall() async {
+    if (_reservation == null) return;
+    final isProvider = context.read<AuthProvider>().user?.role == 'prestataire';
+    final number = isProvider
+        ? _reservation!.clientPhone
+        : _reservation!.providerPhone;
+
+    if (number != null && number.isNotEmpty) {
+      final Uri telUri = Uri.parse('tel:$number');
+      if (await canLaunchUrl(telUri)) {
+        await launchUrl(telUri);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Impossible de lancer l'appel")),
+        );
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Numéro de téléphone indisponible")),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F7), // Gris très clair style iOS
+      backgroundColor: const Color(0xFFF5F5F7),
       appBar: AppBar(
         titleSpacing: 0,
         title: Row(
@@ -277,22 +497,27 @@ class _ChatScreenState extends State<ChatScreen> {
                   : null,
             ),
             const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.otherUserName,
-                  style: const TextStyle(fontSize: 16),
-                ),
-                const Text(
-                  "En ligne", // TODO: Statut réel via WebSocket
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.normal,
-                    color: Colors.white70,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    widget.otherUserName,
+                    style: const TextStyle(fontSize: 16),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-              ],
+                  const Text(
+                    "En ligne",
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.normal,
+                      color: Colors.white70,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -302,9 +527,7 @@ class _ChatScreenState extends State<ChatScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.phone),
-            onPressed: () {
-              // Action appel
-            },
+            onPressed: _showCallChoices,
           ),
           IconButton(
             icon: const Icon(Icons.info_outline),
@@ -327,24 +550,17 @@ class _ChatScreenState extends State<ChatScreen> {
                       horizontal: 16,
                       vertical: 20,
                     ),
+                    addSemanticIndexes: false,
                     itemCount: _messages.length + (_isTyping ? 1 : 0),
                     itemBuilder: (context, index) {
                       if (_isTyping && index == _messages.length) {
                         return _buildTypingIndicator();
                       }
-
                       final msg = _messages[index];
                       final isMe = msg.senderId == _currentUserId;
-
-                      // Groupement des messages
-                      final bool isFirstInGroup =
-                          index == 0 ||
-                          _messages[index - 1].senderId != msg.senderId;
                       final bool isLastInGroup =
                           index == _messages.length - 1 ||
                           _messages[index + 1].senderId != msg.senderId;
-
-                      // Afficher la date si changement de jour ou > 1h
                       bool showDate = false;
                       if (index == 0) {
                         showDate = true;
@@ -357,16 +573,11 @@ class _ChatScreenState extends State<ChatScreen> {
                           showDate = true;
                         }
                       }
-
                       return Column(
+                        key: ValueKey(msg.id),
                         children: [
                           if (showDate) _buildDateSeparator(msg.createdAt),
-                          _buildMessageBubble(
-                            msg,
-                            isMe,
-                            isFirstInGroup,
-                            isLastInGroup,
-                          ),
+                          _buildMessageBubble(msg, isMe, isLastInGroup),
                         ],
                       );
                     },
@@ -383,30 +594,33 @@ class _ChatScreenState extends State<ChatScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: AppTheme.primary.withOpacity(0.08),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.chat_bubble_rounded,
-                  size: 56,
-                  color: AppTheme.primary.withOpacity(0.3),
-                ),
-              )
-              .animate(onPlay: (c) => c.repeat(reverse: true))
-              .scale(
-                begin: const Offset(0.9, 0.9),
-                end: const Offset(1.1, 1.1),
-                duration: 2.seconds,
-                curve: Curves.easeInOut,
-              ),
+          ExcludeSemantics(
+            child:
+                Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withOpacity(0.08),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.chat_bubble_rounded,
+                        size: 56,
+                        color: AppTheme.primary.withOpacity(0.3),
+                      ),
+                    )
+                    .animate(onPlay: (c) => c.repeat(reverse: true))
+                    .scale(
+                      begin: const Offset(0.9, 0.9),
+                      end: const Offset(1.1, 1.1),
+                      duration: 2.seconds,
+                      curve: Curves.easeInOut,
+                    ),
+          ),
           const SizedBox(height: 24),
-          Text(
+          const Text(
             "Aucun message pour l'instant",
             style: TextStyle(
-              color: AppTheme.textPrimary,
+              color: Colors.black87,
               fontSize: 18,
               fontWeight: FontWeight.w900,
             ),
@@ -414,7 +628,7 @@ class _ChatScreenState extends State<ChatScreen> {
           const SizedBox(height: 8),
           Text(
             "Entamez la conversation avec ${widget.otherUserName}",
-            style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+            style: const TextStyle(color: Colors.black45, fontSize: 14),
           ).animate().fadeIn(delay: 200.ms),
         ],
       ),
@@ -435,12 +649,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildMessageBubble(
-    Message msg,
-    bool isMe,
-    bool isFirst,
-    bool isLast,
-  ) {
+  Widget _buildMessageBubble(Message msg, bool isMe, bool isLast) {
     return Align(
           alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
           child: Container(
@@ -473,80 +682,86 @@ class _ChatScreenState extends State<ChatScreen> {
                 if (msg.imageUrl != null) ...[
                   GestureDetector(
                     onTap: () =>
-                        _showFullScreenImage(_getMessageImageUrl(msg.imageUrl)),
+                        _showFullScreenImage(_getMediaUrl(msg.imageUrl)),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: Image.network(
-                        _getMessageImageUrl(msg.imageUrl),
+                        _getMediaUrl(msg.imageUrl),
                         width: 200,
                         fit: BoxFit.cover,
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return Container(
-                            width: 200,
-                            height: 150,
-                            color: Colors.grey.shade200,
-                            child: const Center(
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          );
-                        },
                       ),
                     ),
                   ),
-                  if (msg.content.isNotEmpty) const SizedBox(height: 8),
                 ],
+                if (msg.audioUrl != null)
+                  VoiceNoteBubble(
+                    audioUrl: _getMediaUrl(msg.audioUrl),
+                    isMe: isMe,
+                  ),
                 if (msg.content.isNotEmpty)
-                  Text(
-                    msg.content,
-                    style: TextStyle(
-                      color: isMe ? Colors.white : const Color(0xFF333333),
-                      fontSize: 15,
-                      height: 1.3,
+                  Padding(
+                    padding: EdgeInsets.only(
+                      top: msg.imageUrl != null || msg.audioUrl != null ? 8 : 0,
+                    ),
+                    child: Text(
+                      msg.content,
+                      style: TextStyle(
+                        color: isMe ? Colors.white : const Color(0xFF333333),
+                        fontSize: 15,
+                        height: 1.3,
+                      ),
                     ),
                   ),
-                if (isLast) ...[
-                  const SizedBox(height: 4),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Text(
-                        _formatTime(msg.createdAt),
-                        style: TextStyle(
-                          color: isMe
-                              ? Colors.white.withOpacity(0.7)
-                              : Colors.grey.shade400,
-                          fontSize: 10,
-                        ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _formatTime(msg.createdAt),
+                      style: TextStyle(
+                        color: isMe
+                            ? Colors.white.withOpacity(0.7)
+                            : Colors.grey.shade400,
+                        fontSize: 10,
                       ),
-                      if (isMe) ...[
-                        const SizedBox(width: 4),
-                        Icon(
-                          Icons.done_all,
-                          size: 12,
-                          color: Colors.white.withOpacity(0.7),
-                        ), // Lu
-                      ],
+                    ),
+                    if (isMe) ...[
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.done_all,
+                        size: 12,
+                        color: Colors.white.withOpacity(0.7),
+                      ),
                     ],
-                  ),
-                ],
+                  ],
+                ),
               ],
             ),
           ),
         )
         .animate()
         .fadeIn(duration: 200.ms)
-        .scale(
-          begin: const Offset(0.95, 0.95),
-          end: const Offset(1, 1),
-          curve: Curves.easeOutBack,
-        );
+        .scale(begin: const Offset(0.95, 0.95), end: const Offset(1, 1));
+  }
+
+  void _showFullScreenImage(String url) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+            foregroundColor: Colors.white,
+          ),
+          body: Center(child: InteractiveViewer(child: Image.network(url))),
+        ),
+      ),
+    );
   }
 
   Widget _buildInputArea() {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
@@ -558,66 +773,213 @@ class _ChatScreenState extends State<ChatScreen> {
         ],
       ),
       child: SafeArea(
-        child: Row(
-          children: [
-            IconButton(
-              onPressed: _pickImage,
-              icon: Icon(
-                Icons.add_circle_outline,
-                color: AppTheme.primary.withOpacity(0.8),
-                size: 26,
-              ),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF0F0F5),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: Colors.transparent),
-                ),
-                child: TextField(
-                  controller: _controller,
-                  decoration: const InputDecoration(
-                    hintText: "Votre message...",
-                    hintStyle: TextStyle(color: Colors.black38),
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    isDense: true,
-                  ),
-                  minLines: 1,
-                  maxLines: 4,
-                  textCapitalization: TextCapitalization.sentences,
-                  onChanged: (val) {
-                    // Logic for typing indicator via WebSocket
-                  },
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              decoration: const BoxDecoration(
-                color: AppTheme.primary,
-                shape: BoxShape.circle,
-              ),
-              child: IconButton(
-                onPressed: _sendMessage,
-                icon: const Icon(
-                  Icons.send_rounded,
-                  color: Colors.white,
-                  size: 20,
-                ),
-                padding: const EdgeInsets.all(10),
-                constraints: const BoxConstraints(),
-              ),
-            ),
-          ],
+        child: _isRecording ? _buildRecordingUI() : _buildNormalInputUI(),
+      ),
+    );
+  }
+
+  Widget _buildNormalInputUI() {
+    return Row(
+      children: [
+        IconButton(
+          onPressed: _pickImage,
+          icon: Icon(
+            Icons.add_circle_outline,
+            color: AppTheme.primary.withOpacity(0.8),
+            size: 26,
+          ),
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
         ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0F0F5),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: TextField(
+              controller: _controller,
+              decoration: const InputDecoration(
+                hintText: "Votre message...",
+                hintStyle: TextStyle(color: Colors.black38),
+                border: InputBorder.none,
+                isDense: true,
+              ),
+              minLines: 1,
+              maxLines: 4,
+              textCapitalization: TextCapitalization.sentences,
+              onChanged: (v) => setState(() {}),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        _controller.text.isEmpty
+            ? Listener(
+                onPointerDown: (_) => _startRecording(),
+                onPointerUp: (_) => _stopAndSendRecording(),
+                onPointerCancel: (_) => _stopAndSendRecording(),
+                onPointerMove: (event) {
+                  setState(() {
+                    _recordingDragOffset = event.localPosition.dx;
+                    if (_recordingDragOffset < -100) {
+                      _isCancelled = true;
+                    }
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: const BoxDecoration(
+                    color: AppTheme.primary,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.mic, color: Colors.white, size: 20),
+                ),
+              )
+            : _isSending
+            ? const SizedBox(
+                width: 40,
+                height: 40,
+                child: Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            : Container(
+                decoration: const BoxDecoration(
+                  color: AppTheme.primary,
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  onPressed: _sendMessage,
+                  icon: const Icon(
+                    Icons.send_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  padding: const EdgeInsets.all(10),
+                  constraints: const BoxConstraints(),
+                ),
+              ),
+      ],
+    );
+  }
+
+  Widget _buildRecordingUI() {
+    final bool isCritical = _isCancelled;
+
+    return SizedBox(
+      height: 40,
+      child: Row(
+        children: [
+          ExcludeSemantics(
+            child: const Icon(Icons.mic, color: Colors.red, size: 24)
+                .animate(onPlay: (c) => c.repeat())
+                .shimmer(
+                  duration: 1.seconds,
+                  color: Colors.red.withOpacity(0.3),
+                )
+                .scale(
+                  begin: const Offset(0.9, 0.9),
+                  end: const Offset(1.1, 1.1),
+                ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            _formatDuration(_recordDuration),
+            style: const TextStyle(
+              color: Colors.black87,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Container(
+              alignment: Alignment.center,
+              child: Opacity(
+                opacity: (1 - (_recordingDragOffset.abs() / 100)).clamp(0, 1),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextButton(
+                        onPressed: () => _stopAndSendRecording(force: true),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(40, 32),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text(
+                          "STOP",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      isCritical
+                          ? const Text(
+                              "Relâcher",
+                              style: TextStyle(
+                                color: Colors.red,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            )
+                          : Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.chevron_left,
+                                  color: Colors.grey.shade400,
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 2),
+                                Text(
+                                  "Glisser",
+                                  style: TextStyle(
+                                    color: Colors.grey.shade400,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          ExcludeSemantics(
+            child:
+                Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isCritical
+                            ? Colors.red.withOpacity(0.1)
+                            : AppTheme.primary.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        isCritical ? Icons.delete_outline : Icons.mic,
+                        color: isCritical ? Colors.red : AppTheme.primary,
+                        size: 24,
+                      ),
+                    )
+                    .animate(onPlay: (c) => c.repeat(reverse: true))
+                    .scale(
+                      duration: 500.ms,
+                      begin: const Offset(1, 1),
+                      end: const Offset(1.2, 1.2),
+                    ),
+          ),
+        ],
       ),
     );
   }
@@ -633,9 +995,6 @@ class _ChatScreenState extends State<ChatScreen> {
             backgroundImage: widget.otherUserPhoto != null
                 ? NetworkImage(widget.otherUserPhoto!)
                 : null,
-            child: widget.otherUserPhoto == null
-                ? const Icon(Icons.person, size: 12, color: Colors.white)
-                : null,
           ),
           const SizedBox(width: 8),
           Container(
@@ -643,49 +1002,15 @@ class _ChatScreenState extends State<ChatScreen> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(18),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  "En train d'écrire",
-                  style: TextStyle(
-                    color: Colors.grey.shade500,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Row(
-                  children: List.generate(3, (index) {
-                    return Container(
-                          width: 3,
-                          height: 3,
-                          margin: const EdgeInsets.symmetric(horizontal: 1),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade400,
-                            shape: BoxShape.circle,
-                          ),
-                        )
-                        .animate(onPlay: (c) => c.repeat())
-                        .fadeIn(delay: (index * 200).ms, duration: 400.ms)
-                        .then()
-                        .fadeOut(duration: 400.ms);
-                  }),
-                ),
-              ],
+            child: const Text(
+              "En train d'écrire...",
+              style: TextStyle(color: Colors.grey, fontSize: 12),
             ),
           ),
         ],
       ),
-    ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.1, end: 0);
+    );
   }
 
   String _formatTime(DateTime date) {

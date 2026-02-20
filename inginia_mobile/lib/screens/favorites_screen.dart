@@ -31,7 +31,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
 
       if (favs.isEmpty) {
         // Chargement des recommandations si pas de favoris
-        final allProviders = await _repository.getProviders();
+        final result = await _repository.getProviders();
+        final List<User> allProviders = result['providers'];
         recommended = allProviders.take(3).toList();
       }
 

@@ -23,13 +23,15 @@ class ShimmerLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Shimmer.fromColors(
-      baseColor: Colors.grey[300]!,
-      highlightColor: Colors.grey[100]!,
-      child: Container(
-        width: width,
-        height: height,
-        decoration: ShapeDecoration(color: Colors.grey, shape: shapeBorder),
+    return ExcludeSemantics(
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey[300]!,
+        highlightColor: Colors.grey[100]!,
+        child: Container(
+          width: width,
+          height: height,
+          decoration: ShapeDecoration(color: Colors.grey, shape: shapeBorder),
+        ),
       ),
     );
   }

@@ -20,7 +20,8 @@ class LoginRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email' => 'required|string|email',
+            'email' => 'required_without:phone|nullable|string|email',
+            'phone' => 'required_without:email|nullable|string',
             'password' => 'required|string',
         ];
     }
@@ -28,8 +29,9 @@ class LoginRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'email.required' => 'L\'email est requis.',
+            'email.required_without' => 'L\'email ou le téléphone est requis.',
             'email.email' => 'Format d\'email invalide.',
+            'phone.required_without' => 'Le téléphone ou l\'email est requis.',
             'password.required' => 'Le mot de passe est requis.',
         ];
     }

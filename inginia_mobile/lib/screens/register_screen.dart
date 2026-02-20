@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../providers/auth_provider.dart';
 import '../theme/app_theme.dart';
+import 'otp_verification_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -26,6 +27,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   // State
   String _userType = 'client'; // 'client' or 'prestataire'
+  String _registrationMethod = 'phone'; // 'phone' or 'email'
   bool _isAgency = false;
   final List<String> _selectedProfessions = [];
   final List<String> _customProfessions = [];
@@ -130,8 +132,42 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ),
                           child: Row(
                             children: [
-                              _buildToggleOption('Client', 'client'),
-                              _buildToggleOption('Prestataire', 'prestataire'),
+                              _buildToggleOption(
+                                'Client',
+                                'client',
+                                isUserType: true,
+                              ),
+                              _buildToggleOption(
+                                'Prestataire',
+                                'prestataire',
+                                isUserType: true,
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // Toggle Email / Phone Registration
+                        Text('S\'inscrire avec', style: _labelStyle),
+                        const SizedBox(height: 8),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            borderRadius: BorderRadius.circular(50),
+                          ),
+                          child: Row(
+                            children: [
+                              _buildToggleOption(
+                                'Téléphone',
+                                'phone',
+                                isUserType: false,
+                              ),
+                              _buildToggleOption(
+                                'Email',
+                                'email',
+                                isUserType: false,
+                              ),
                             ],
                           ),
                         ),
@@ -172,20 +208,40 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                               const SizedBox(height: 16),
 
-                              // CHAMPS COMMUNS
-                              Text('Email', style: _labelStyle),
-                              const SizedBox(height: 8),
-                              TextFormField(
-                                controller: _emailController,
-                                decoration: _inputDecoration(
-                                  'exemple@email.com',
-                                  Icons.email_outlined,
+                              if (_registrationMethod == 'email') ...[
+                                Text('Email', style: _labelStyle),
+                                const SizedBox(height: 8),
+                                TextFormField(
+                                  controller: _emailController,
+                                  decoration: _inputDecoration(
+                                    'exemple@email.com',
+                                    Icons.email_outlined,
+                                  ),
+                                  keyboardType: TextInputType.emailAddress,
+                                  validator: (val) =>
+                                      val!.isEmpty ? 'Requis' : null,
                                 ),
-                                keyboardType: TextInputType.emailAddress,
-                                validator: (val) =>
-                                    val!.isEmpty ? 'Requis' : null,
-                              ),
+                              ] else ...[
+                                Text('Téléphone', style: _labelStyle),
+                                const SizedBox(height: 8),
+                                TextFormField(
+                                  controller: _phoneController,
+                                  decoration: _inputDecoration(
+                                    '06 12 34 56 78',
+                                    Icons.phone_outlined,
+                                  ),
+                                  keyboardType: TextInputType.phone,
+                                  validator: (val) =>
+                                      val!.isEmpty ? 'Requis' : null,
+                                ),
+                              ],
+
                               const SizedBox(height: 16),
+
+                              const SizedBox(height: 16),
+
+                              // OTP Section Removed
+                              const SizedBox(height: 24),
 
                               Text('Mot de passe', style: _labelStyle),
                               const SizedBox(height: 8),
@@ -202,16 +258,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               ),
                               const SizedBox(height: 16),
 
-                              Text('Téléphone', style: _labelStyle),
-                              const SizedBox(height: 8),
-                              TextFormField(
-                                controller: _phoneController,
-                                decoration: _inputDecoration(
-                                  '06 12 34 56 78',
-                                  Icons.phone_outlined,
+                              // If email reg, phone is optional at the end, if phone reg, email is optional
+                              if (_registrationMethod == 'email') ...[
+                                Text(
+                                  'Téléphone (facultatif)',
+                                  style: _labelStyle,
                                 ),
-                                keyboardType: TextInputType.phone,
-                              ),
+                                const SizedBox(height: 8),
+                                TextFormField(
+                                  controller: _phoneController,
+                                  decoration: _inputDecoration(
+                                    '06 12 34 56 78',
+                                    Icons.phone_outlined,
+                                  ),
+                                  keyboardType: TextInputType.phone,
+                                ),
+                              ] else ...[
+                                Text('Email (facultatif)', style: _labelStyle),
+                                const SizedBox(height: 8),
+                                TextFormField(
+                                  controller: _emailController,
+                                  decoration: _inputDecoration(
+                                    'exemple@email.com',
+                                    Icons.email_outlined,
+                                  ),
+                                  keyboardType: TextInputType.emailAddress,
+                                ),
+                              ],
 
                               // Adresse pour tout le monde (dans React c'est dans "commun" ou Provider ?)
                               // Dans react: Client a pas "nom service", Provider a "adresse". Client a rien de spé?
@@ -276,6 +349,63 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                   const SizedBox(height: 24),
 
+                  const SizedBox(height: 24),
+
+                  Row(
+                    children: [
+                      const Expanded(child: Divider()),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          "OU",
+                          style: GoogleFonts.inter(
+                            color: Colors.grey[400],
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      const Expanded(child: Divider()),
+                    ],
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  OutlinedButton.icon(
+                    onPressed: authProvider.isLoading
+                        ? null
+                        : () async {
+                            final success = await authProvider
+                                .loginWithGoogle();
+                            if (success && mounted) {
+                              Navigator.pop(context);
+                            }
+                          },
+                    icon: authProvider.isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.g_mobiledata, size: 30),
+                    label: Text(
+                      "Continuer avec Google",
+                      style: GoogleFonts.inter(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[800],
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 52),
+                      side: BorderSide(color: Colors.grey[300]!),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
                   // Login Link
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -308,11 +438,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   // --- WIDGETS ---
 
-  Widget _buildToggleOption(String label, String value) {
-    final isSelected = _userType == value;
+  Widget _buildToggleOption(
+    String label,
+    String value, {
+    required bool isUserType,
+  }) {
+    final isSelected = isUserType
+        ? _userType == value
+        : _registrationMethod == value;
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => _userType = value),
+        onTap: () => setState(() {
+          if (isUserType) {
+            _userType = value;
+          } else {
+            _registrationMethod = value;
+          }
+        }),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
@@ -623,7 +765,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   // --- LOGIC ---
-
   Future<void> _handleRegister(AuthProvider authProvider) async {
     if (_userType == 'prestataire' &&
         _selectedProfessions.isEmpty &&
@@ -646,12 +787,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
           "${_nameController.text.trim()} ${_firstNameController.text.trim()}";
     }
 
-    // Call AuthProvider with all fields
-    final success = await authProvider.register(
+    // Determine Identifier for Backend
+    String? email = _registrationMethod == 'email'
+        ? _emailController.text.trim()
+        : (_emailController.text.trim().isNotEmpty
+              ? _emailController.text.trim()
+              : null);
+
+    String? phone = _registrationMethod == 'phone'
+        ? _phoneController.text.trim()
+        : (_phoneController.text.trim().isNotEmpty
+              ? _phoneController.text.trim()
+              : null);
+
+    // Call AuthProvider (email is now optional string in provider)
+    // Call AuthProvider (email is now optional string in provider)
+    final result = await authProvider.register(
       name: fullName,
-      email: _emailController.text,
+      email: email,
       password: _passwordController.text,
-      phone: _phoneController.text,
+      phone: phone,
       role: _userType,
       isAgency: _userType == 'prestataire' ? _isAgency : null,
       professionIds: _userType == 'prestataire' ? _selectedProfessions : null,
@@ -659,16 +814,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
       minPrice: _userType == 'prestataire' ? _minPriceController.text : null,
       slogan: _userType == 'prestataire' ? _sloganController.text : null,
       location: _addressController.text,
-      adresse: _addressController
-          .text, // Using same field for both location and adresse
-      latitude: 0.0, // TODO: Get actual geolocation if needed
+      adresse: _addressController.text,
+      latitude: 0.0,
       longitude: 0.0,
     );
 
-    if (success && mounted) {
-      Navigator.pop(context);
+    if (result['success'] == true && mounted) {
+      if (result['requireVerification'] == true) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OtpVerificationScreen(
+              identifier: result['identifier'],
+              verificationMethod: result['verificationMethod'],
+            ),
+          ),
+        );
+      } else {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Compte créé ! Connectez-vous.")),
+        );
+      }
+    } else if (mounted && result['error'] != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Compte créé ! Connectez-vous.")),
+        SnackBar(content: Text(result['error'] ?? 'Erreur inconnue')),
       );
     }
   }

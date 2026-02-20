@@ -27,9 +27,11 @@ class HomeController extends Controller
     public function getPopularProviders()
     {
         $providers = User::whereIn('role', ['prestataire', 'service'])
+            ->where('is_available', true)
+            ->where('balance', '>', 0)
             ->with('professions')
-            ->orderByDesc('rating') // si tu as un champ note pour les évaluations
-            ->take(10) // top 10 par exemple
+            ->orderByDesc('rating') 
+            ->take(10)
             ->get();
 
         return response()->json($providers);
@@ -45,6 +47,8 @@ class HomeController extends Controller
         }
 
         $providers = User::whereIn('role', ['prestataire', 'service'])
+            ->where('is_available', true)
+            ->where('balance', '>', 0)
             ->whereHas('professions', function ($query) use ($categoryId) {
                 $query->where('professions.id', $categoryId);
             })
@@ -54,12 +58,11 @@ class HomeController extends Controller
             ->get();
 
         return response()->json([
-            'category' => $category, // 🔹 on renvoie le nom et l'id
+            'category' => $category,
             'providers' => $providers
         ]);
     }
 
-    // HomeController.php
     public function search(Request $request)
     {
         $query = $request->get('query', '');
@@ -73,6 +76,8 @@ class HomeController extends Controller
         }
     
         $providers = User::where('role', 'prestataire')
+            ->where('is_available', true)
+            ->where('balance', '>', 0)
             ->where(function ($q) use ($query) {
                 $q->where('name', 'ilike', "%$query%")
                   ->orWhereHas('professions', function ($q2) use ($query) {
@@ -104,7 +109,10 @@ class HomeController extends Controller
         $lng = $request->longitude;
         $besoin = $request->besoin;
     
-        $prestataires = User::where('role', 'prestataire')->with('professions')
+        $prestataires = User::where('role', 'prestataire')
+        ->where('is_available', true)
+        ->where('balance', '>', 0)
+        ->with('professions')
         ->when($besoin, function ($query) use ($besoin) {
             $query->whereHas('professions', function ($q) use ($besoin) {
                 $q->where('name', 'LIKE', "%$besoin%");

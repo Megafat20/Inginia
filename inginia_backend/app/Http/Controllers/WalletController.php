@@ -62,8 +62,8 @@ class WalletController extends Controller
             $user->balance += $amount;
             $user->save();
 
-            // 3. ✅ Réactiver le prestataire (débloquer)
-            if ($user->role === 'prestataire' && !$user->is_available) {
+            // 3. ✅ Réactiver le prestataire (uniquement si solde redevient positif)
+            if ($user->role === 'prestataire' && $user->balance > 0 && !$user->is_available) {
                 $user->is_available = true;
                 $user->save();
             }

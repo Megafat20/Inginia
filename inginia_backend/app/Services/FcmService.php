@@ -45,7 +45,6 @@ class FcmService
                         'sound' => $options['sound'] ?? 'default',
                         'color' => $options['color'] ?? '#4F46E5',
                         'channel_id' => $options['channel_id'] ?? 'default',
-                        'priority' => 'high',
                         'default_sound' => true,
                         'default_vibrate_timings' => true,
                     ],
@@ -72,11 +71,12 @@ class FcmService
                 ])
             );
 
-            $this->messaging->send($message->withChangedTarget('token', $token));
+            $response = $this->messaging->send($message->withChangedTarget('token', $token));
             
             Log::info('FCM notification sent successfully', [
                 'token' => substr($token, 0, 20) . '...',
                 'title' => $title,
+                'response' => $response,
             ]);
 
             return true;
@@ -179,7 +179,7 @@ class FcmService
                 'screen' => 'chat',
             ],
             [
-                'sound' => 'message_sound.mp3',
+                'sound' => 'default',
                 'color' => '#3B82F6',
                 'channel_id' => 'messages',
             ]
@@ -204,7 +204,7 @@ class FcmService
             ],
             [
                 'priority' => 'high',
-                'sound' => 'urgent_sound.mp3',
+                'sound' => 'default',
                 'color' => '#DC2626',
                 'channel_id' => 'urgent',
                 'badge' => 1,

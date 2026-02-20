@@ -26,7 +26,7 @@ class AdminSeeder extends Seeder
                 'is_verified' => true,
             ],
             [
-                'name' => 'Abdoul Fataou ',
+                'name' => 'Abdoul Fataou',
                 'email' => 'superfataou13@inginia.com',
                 'password' => Hash::make('123456789'),
                 'role' => 'admin',
