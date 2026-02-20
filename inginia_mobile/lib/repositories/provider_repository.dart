@@ -138,21 +138,36 @@ class ProviderRepository {
     String? otherService,
     double? latitude,
     double? longitude,
+    String? address,
+    String? audioDescriptionPath,
   }) async {
     try {
       final dateStr = requestedDate.toIso8601String().split('T')[0];
       final fullDateTime = '$dateStr $time:00';
 
-      final data = {
+      final Map<String, dynamic> dataMap = {
         'requested_date': fullDateTime,
         'description': description,
         if (competanceId != null) 'competance_id': competanceId,
         if (otherService != null) 'other_service': otherService,
         'latitude': latitude,
         'longitude': longitude,
+        if (address != null) 'address': address,
       };
 
-      await _apiService.client.post('/reservations/$providerId', data: data);
+      if (audioDescriptionPath != null) {
+        dataMap['audio_description'] = await MultipartFile.fromFile(
+          audioDescriptionPath,
+          filename: 'description.m4a',
+        );
+      }
+
+      final formData = FormData.fromMap(dataMap);
+
+      await _apiService.client.post(
+        '/reservations/$providerId',
+        data: formData,
+      );
     } on DioException catch (e) {
       throw Exception(
         e.response?.data['message'] ?? 'Failed to submit reservation',

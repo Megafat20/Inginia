@@ -45,5 +45,9 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Cette application utilise la reconnaissance vocale pour vous permettre de décrire vos besoins par audio.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Cette application utilise le microphone pour vous permettre de décrire vos besoins par audio.</string>
 </dict>
 </plist>

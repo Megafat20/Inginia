@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../services/admin_service.dart';
@@ -144,6 +145,86 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.04),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: TextField(
+                          decoration: InputDecoration(
+                            hintText:
+                                'Rechercher un utilisateur, prestataire...',
+                            prefixIcon: const Icon(
+                              Icons.search_rounded,
+                              color: AppTheme.primary,
+                            ),
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 15,
+                            ),
+                          ),
+                          onSubmitted: (value) {
+                            // Implement global search logic or navigate to search screen
+                          },
+                        ),
+                      ),
+                    ),
+
+                    // Priority Alerts Section
+                    if ((_stats?['alerts']?['pending_providers'] ?? 0) > 0)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.warning_amber_rounded,
+                                  color: Colors.red.shade700,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'URGENT',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.red.shade700,
+                                    letterSpacing: 1.2,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            _buildAlertCard(
+                              'Validations en attente',
+                              '${_stats?['alerts']?['pending_providers']} nouveaux prestataires à vérifier',
+                              Icons.notification_important_rounded,
+                              () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      const ProviderValidationScreen(),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    const SizedBox(height: 16),
+
                     // Period Selector Chips
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -173,6 +254,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                 selected: isSelected,
                                 onSelected: (val) {
                                   if (val) {
+                                    HapticFeedback.selectionClick();
                                     setState(() => _selectedPeriod = p);
                                     _loadStats();
                                   }
@@ -283,24 +365,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                             ),
                             const SizedBox(height: 16),
 
-                            // Alerts Card
-                            if ((_stats?['alerts']?['pending_providers'] ?? 0) >
-                                0)
-                              _buildAlertCard(
-                                'Validations en attente',
-                                '${_stats?['alerts']?['pending_providers']} nouveaux prestataires à vérifier',
-                                Icons.notification_important_rounded,
-                                () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        const ProviderValidationScreen(),
-                                  ),
-                                ),
-                              ),
-
-                            const SizedBox(height: 12),
-
                             _buildActionCard(
                               'Utilisateurs',
                               'Gérer les accès et bannir',
@@ -388,7 +452,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   ) {
     bool isPositive = variation >= 0;
 
-    return ExcludeSemantics(
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.lightImpact();
+      },
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -550,7 +617,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     VoidCallback onTap,
   ) {
     return InkWell(
-      onTap: onTap,
+      onTap: () {
+        HapticFeedback.mediumImpact();
+        onTap();
+      },
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.all(20),

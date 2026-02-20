@@ -8,6 +8,8 @@ import '../../models/reservation_model.dart';
 import '../../repositories/provider_repository.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/location_service.dart';
+import '../../services/websocket_service.dart';
+import '../components/mission_details_modal.dart';
 
 class ProviderHomeTabEnhanced extends StatefulWidget {
   const ProviderHomeTabEnhanced({super.key});
@@ -24,16 +26,33 @@ class _ProviderHomeTabEnhancedState extends State<ProviderHomeTabEnhanced> {
   int? _activeReservationId;
   late Future<List<Reservation>> _futureReservations;
   late Future<Map<String, dynamic>> _futureStats;
+  StreamSubscription? _refreshSubscription;
 
   @override
   void initState() {
     super.initState();
     _futureReservations = _repository.getMyReservationsAsProvider();
     _futureStats = _repository.getProviderStats();
+    _initWebSocket();
+  }
+
+  void _initWebSocket() {
+    _refreshSubscription?.cancel();
+    _refreshSubscription = WebSocketService().manualRefreshStream.listen((_) {
+      if (mounted) _refresh();
+    });
+
+    final userId = context.read<AuthProvider>().user?.id;
+    if (userId != null) {
+      WebSocketService().listenToUserUpdates(userId, (data) {
+        if (mounted) _refresh();
+      });
+    }
   }
 
   @override
   void dispose() {
+    _refreshSubscription?.cancel();
     _stopLocationSharing();
     super.dispose();
   }
@@ -402,26 +421,29 @@ class _ProviderHomeTabEnhancedState extends State<ProviderHomeTabEnhanced> {
         children: [
           Icon(icon, color: Colors.white, size: 20),
           const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                value,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-              Text(
-                label,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.7),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
@@ -564,7 +586,13 @@ class _ProviderHomeTabEnhancedState extends State<ProviderHomeTabEnhanced> {
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
           onTap: () {
-            // Navigate to reservation details
+            showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              builder: (context) =>
+                  MissionDetailsModal(reservation: r, onUpdate: _refresh),
+            );
           },
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -824,6 +852,7 @@ class _ProviderHomeTabEnhancedState extends State<ProviderHomeTabEnhanced> {
       await _repository.updateMissionStatus(id, status);
       // Trigger a refresh
       _refresh();
+      WebSocketService().triggerManualRefresh();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Erreur: $e"), backgroundColor: Colors.red),

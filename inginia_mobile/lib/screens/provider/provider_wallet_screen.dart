@@ -27,14 +27,15 @@ class _ProviderWalletScreenState extends State<ProviderWalletScreen> {
     try {
       final response = await _apiService.client.get('/wallet');
       setState(() {
-        _balance = (response.data['balance'] ?? 0.0).toDouble();
+        _balance =
+            double.tryParse((response.data['balance'] ?? 0).toString()) ?? 0.0;
         _transactions = List<Map<String, dynamic>>.from(
           response.data['transactions'].map(
             (t) => {
               'type': t['type'],
               'title': t['description'] ?? 'Transaction',
               'subtitle': t['reference'] ?? 'Ref: ---',
-              'amount': (t['amount'] ?? 0.0).toDouble(),
+              'amount': double.tryParse((t['amount'] ?? 0).toString()) ?? 0.0,
               'date': DateTime.parse(t['created_at']),
             },
           ),

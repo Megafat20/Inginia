@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
@@ -132,7 +133,10 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
       floatingActionButton:
           (_tabController.index == 0 && !authProvider.isOfflineMode)
           ? FloatingActionButton.extended(
-              onPressed: _showSOSDialog,
+              onPressed: () {
+                HapticFeedback.heavyImpact();
+                _showSOSDialog();
+              },
               backgroundColor: AppTheme.error,
               icon: const Icon(Icons.sos_rounded, color: Colors.white),
               label: const Text(
@@ -506,6 +510,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () {
+                      HapticFeedback.mediumImpact();
                       Navigator.pop(ctx);
                       _sendSOS(selectedType, descriptionController.text);
                     },
@@ -850,21 +855,6 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
                             ],
                           ),
                         ),
-                        IconButton(
-                          style: IconButton.styleFrom(
-                            backgroundColor: Colors.white.withOpacity(0.15),
-                            padding: const EdgeInsets.all(8),
-                            minimumSize: const Size(0, 0),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          onPressed: () =>
-                              context.read<AuthProvider>().logout(),
-                          icon: const Icon(
-                            Icons.power_settings_new_rounded,
-                            color: Colors.white,
-                            size: 18,
-                          ),
-                        ),
                       ],
                     ),
 
@@ -1091,7 +1081,10 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
     bool isExpanded = false,
   }) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: () {
+        HapticFeedback.lightImpact();
+        onTap();
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(
           horizontal: 10,
@@ -1271,236 +1264,76 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
 
               const SizedBox(height: 24),
 
-              // Prestataires à proximité (New Section)
-              if (providerListProvider.providers.isNotEmpty) ...[
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              // Prestataires à proximité (Optimisé)
+              Builder(
+                builder: (context) {
+                  List<User> nearbyProviders = filteredProviders;
+                  if (_userPosition != null) {
+                    nearbyProviders = LocationService.filterByRadius(
+                      nearbyProviders,
+                      _userPosition!.latitude,
+                      _userPosition!.longitude,
+                      _radiusFilter,
+                    );
+                    nearbyProviders = LocationService.sortByDistance(
+                      nearbyProviders,
+                      _userPosition!.latitude,
+                      _userPosition!.longitude,
+                    );
+                  }
+                  nearbyProviders = nearbyProviders.take(10).toList();
+                  if (nearbyProviders.isEmpty) return const SizedBox.shrink();
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'À proximité',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      // Filtre par rayon
-                      if (_userPosition != null)
-                        PopupMenuButton<double>(
-                          initialValue: _radiusFilter,
-                          onSelected: (value) =>
-                              setState(() => _radiusFilter = value),
-                          icon: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppTheme.primary.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.tune,
-                                  size: 16,
-                                  color: AppTheme.primary,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${_radiusFilter.toInt()}km',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppTheme.primary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          itemBuilder: (context) => [
-                            const PopupMenuItem(
-                              value: 5.0,
-                              child: Text('📍 5 km'),
-                            ),
-                            const PopupMenuItem(
-                              value: 10.0,
-                              child: Text('📍 10 km'),
-                            ),
-                            const PopupMenuItem(
-                              value: 20.0,
-                              child: Text('📍 20 km'),
-                            ),
-                            const PopupMenuItem(
-                              value: 50.0,
-                              child: Text('📍 50 km'),
-                            ),
-                          ],
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height:
-                      250, // Augmenté pour éviter les débordements verticaux
-                  child: Builder(
-                    builder: (context) {
-                      // Trier et filtrer les prestataires par distance
-                      List<User> nearbyProviders = filteredProviders;
-
-                      if (_userPosition != null) {
-                        // Filtrer par rayon
-                        nearbyProviders = LocationService.filterByRadius(
-                          nearbyProviders,
-                          _userPosition!.latitude,
-                          _userPosition!.longitude,
-                          _radiusFilter,
-                        );
-
-                        // Trier par distance
-                        nearbyProviders = LocationService.sortByDistance(
-                          nearbyProviders,
-                          _userPosition!.latitude,
-                          _userPosition!.longitude,
-                        );
-                      }
-
-                      // Limiter à 10 prestataires
-                      nearbyProviders = nearbyProviders.take(10).toList();
-
-                      if (nearbyProviders.isEmpty) {
-                        return Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.location_off,
-                                size: 48,
-                                color: Colors.grey.shade400,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Aucun prestataire dans un rayon de ${_radiusFilter.toInt()}km',
-                                style: TextStyle(color: Colors.grey.shade600),
-                              ),
-                            ],
-                          ),
-                        );
-                      }
-
-                      return ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: nearbyProviders.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 16),
-                        itemBuilder: (context, index) {
-                          final provider = nearbyProviders[index];
-                          double? distance;
-                          if (_userPosition != null) {
-                            distance = LocationService.getProviderDistance(
-                              provider,
-                              _userPosition!.latitude,
-                              _userPosition!.longitude,
-                            );
-                          }
-                          return _buildNearbyProviderCard(provider, distance);
-                        },
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: 24),
-              ],
-
-              // Filters Row
-              Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: AppTheme.surface),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.03),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _sortOption,
-                          isExpanded: true,
-                          icon: const Icon(Icons.keyboard_arrow_down_rounded),
-                          style: const TextStyle(
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 4),
+                        child: Text(
+                          'À proximité',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
                             color: AppTheme.textPrimary,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
                           ),
-                          onChanged: (value) =>
-                              setState(() => _sortOption = value!),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'rating_desc',
-                              child: Text('⭐ Mieux notés'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'price_asc',
-                              child: Text('💰 Moins chers'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'price_desc',
-                              child: Text('💎 Haut de gamme'),
-                            ),
-                          ],
                         ),
                       ),
-                    ),
-                  ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        height: 250,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: nearbyProviders.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(width: 16),
+                          itemBuilder: (context, index) {
+                            final provider = nearbyProviders[index];
+                            double? distance;
+                            if (_userPosition != null) {
+                              distance = LocationService.getProviderDistance(
+                                provider,
+                                _userPosition!.latitude,
+                                _userPosition!.longitude,
+                              );
+                            }
+                            return _buildNearbyProviderCard(provider, distance);
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+                  );
+                },
+              ),
 
-                  const SizedBox(width: 12),
-
-                  // Favorites Toggle
-                  Material(
-                    color: _showFavoritesOnly
-                        ? AppTheme.accent.withOpacity(0.1)
-                        : Colors.white,
-                    borderRadius: BorderRadius.circular(18),
-                    child: InkWell(
-                      onTap: () => setState(
-                        () => _showFavoritesOnly = !_showFavoritesOnly,
-                      ),
-                      borderRadius: BorderRadius.circular(18),
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: _showFavoritesOnly
-                                ? AppTheme.accent
-                                : AppTheme.surface,
-                            width: 2,
-                          ),
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: Icon(
-                          _showFavoritesOnly
-                              ? Icons.favorite
-                              : Icons.favorite_border,
-                          color: _showFavoritesOnly
-                              ? AppTheme.accent
-                              : AppTheme.textSecondary,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+              // Simple Results Counter or Label
+              const Text(
+                'Résultats',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
+                ),
               ),
 
               const SizedBox(height: 24),
@@ -1541,6 +1374,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
               : Colors.transparent,
           child: InkWell(
             onTap: () {
+              HapticFeedback.selectionClick();
               Provider.of<ProviderListProvider>(
                 context,
                 listen: false,
@@ -2406,16 +2240,66 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
 
                 const SizedBox(height: 20),
                 const Text(
-                  "Note Minimum",
+                  "Trier par",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: DropdownButtonFormField<String>(
+                    value: _sortOption,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'rating_desc',
+                        child: Text('⭐ Mieux notés'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'price_asc',
+                        child: Text('💰 Moins chers'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'price_desc',
+                        child: Text('💎 Haut de gamme'),
+                      ),
+                    ],
+                    onChanged: (val) => setStateModal(() => _sortOption = val!),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+                const Text(
+                  "Rayon de recherche (km)",
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 Slider(
-                  value: _minRating,
-                  min: 0,
-                  max: 5,
-                  divisions: 5,
-                  label: _minRating.toString(),
-                  onChanged: (val) => setStateModal(() => _minRating = val),
+                  value: _radiusFilter,
+                  min: 5,
+                  max: 100,
+                  divisions: 19,
+                  label: "${_radiusFilter.round()} km",
+                  onChanged: (val) => setStateModal(() => _radiusFilter = val),
+                ),
+
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      "Uniquement mes favoris",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Switch(
+                      value: _showFavoritesOnly,
+                      activeColor: AppTheme.primary,
+                      onChanged: (val) =>
+                          setStateModal(() => _showFavoritesOnly = val),
+                    ),
+                  ],
                 ),
 
                 const SizedBox(height: 24),
@@ -2423,8 +2307,11 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () {
+                      HapticFeedback.mediumImpact();
                       Navigator.pop(ctx);
-                      _showFilters = true; // Mark filters as active
+                      setState(() {
+                        _showFilters = true; // Mark filters as active
+                      });
                       Provider.of<ProviderListProvider>(
                         context,
                         listen: false,

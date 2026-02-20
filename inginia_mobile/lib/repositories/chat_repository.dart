@@ -15,16 +15,9 @@ class ChatRepository {
       final response = await _apiService.client.get(
         '/reservations/$reservationId/messages',
       );
-      /*
-        Response format expected:
-        {
-          "messages": [ ... ]
-        }
-      */
       final list = response.data['messages'] as List;
       return list.map((e) => Message.fromJson(e)).toList();
     } catch (e) {
-      // Silent error - return empty list
       return [];
     }
   }
@@ -62,6 +55,44 @@ class ChatRepository {
       return Message.fromJson(response.data['message']);
     } on DioException catch (e) {
       throw Exception(e.response?.data['message'] ?? 'Erreur d\'envoi');
+    }
+  }
+
+  /// 💰 Prestataire propose un prix via le chat
+  Future<Message> proposePrice(
+    int reservationId,
+    double price, {
+    String? note,
+  }) async {
+    try {
+      final response = await _apiService.client.post(
+        '/reservations/$reservationId/propose-price',
+        data: {
+          'price': price,
+          if (note != null && note.isNotEmpty) 'note': note,
+        },
+      );
+      return Message.fromJson(response.data['message']);
+    } on DioException catch (e) {
+      throw Exception(
+        e.response?.data['error'] ?? 'Erreur lors de la proposition',
+      );
+    }
+  }
+
+  /// ✅❌ Client répond à une proposition de prix
+  Future<Map<String, dynamic>> respondToPrice(
+    int messageId,
+    String response, // 'accepted' | 'refused'
+  ) async {
+    try {
+      final res = await _apiService.client.post(
+        '/messages/$messageId/respond-price',
+        data: {'response': response},
+      );
+      return res.data;
+    } on DioException catch (e) {
+      throw Exception(e.response?.data['error'] ?? 'Erreur lors de la réponse');
     }
   }
 }

@@ -5,6 +5,9 @@ class Message {
   final String content;
   final String? imageUrl;
   final String? audioUrl;
+  final String type; // 'text' | 'image' | 'audio' | 'price_proposal'
+  final double? proposedPrice;
+  final String? priceStatus; // 'pending' | 'accepted' | 'refused'
   final DateTime createdAt;
   final String? senderName;
 
@@ -15,6 +18,9 @@ class Message {
     required this.content,
     this.imageUrl,
     this.audioUrl,
+    this.type = 'text',
+    this.proposedPrice,
+    this.priceStatus,
     required this.createdAt,
     this.senderName,
   });
@@ -31,6 +37,11 @@ class Message {
       content: json['message'] ?? '',
       imageUrl: json['image_url'],
       audioUrl: json['audio_url'],
+      type: json['type'] ?? 'text',
+      proposedPrice: json['proposed_price'] != null
+          ? double.tryParse(json['proposed_price'].toString())
+          : null,
+      priceStatus: json['price_status'],
       createdAt: json['created_at'] != null
           ? (DateTime.tryParse(json['created_at']) ?? DateTime.now())
           : DateTime.now(),

@@ -21,6 +21,8 @@ class Reservation {
   final double? providerLng;
   final List<String> photosBefore;
   final List<String> photosAfter;
+  final String? audioDescription;
+  final String? address;
 
   Reservation({
     required this.id,
@@ -43,6 +45,8 @@ class Reservation {
     this.providerLng,
     this.photosBefore = const [],
     this.photosAfter = const [],
+    this.audioDescription,
+    this.address,
   });
 
   String get eta {
@@ -82,7 +86,7 @@ class Reservation {
       status: json['status'] ?? 'pending',
       requestedDate:
           DateTime.tryParse(json['requested_date'] ?? '') ?? DateTime.now(),
-      description: json['description'],
+      description: json['description'] ?? json['commentaire'],
       providerName: provider['name'] ?? 'Prestataire Inconnu',
       providerPhoto: provider['profile_photo_url'],
       providerPhone: provider['phone'],
@@ -111,6 +115,8 @@ class Reservation {
       photosAfter:
           (json['photos_after'] as List?)?.map((e) => e.toString()).toList() ??
           [],
+      audioDescription: json['audio_description'],
+      address: json['address'],
     );
   }
 }

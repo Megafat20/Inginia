@@ -10,8 +10,11 @@ import '../tracking_map_screen.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/websocket_service.dart';
+import 'package:flutter/services.dart';
 import '../../widgets/shimmer_loading.dart';
 import '../components/mission_details_modal.dart';
+import 'package:url_launcher/url_launcher.dart' as url;
+import 'package:intl/intl.dart';
 
 class ProviderMissionsTab extends StatefulWidget {
   const ProviderMissionsTab({super.key});
@@ -27,6 +30,7 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
   bool _isLoading = true;
   late TabController _tabController;
   Timer? _trackingTimer;
+  StreamSubscription? _refreshSubscription;
 
   @override
   bool get wantKeepAlive => true;
@@ -55,6 +59,11 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
         _fetchMissions();
       });
     }
+
+    _refreshSubscription?.cancel();
+    _refreshSubscription = WebSocketService().manualRefreshStream.listen((_) {
+      if (mounted) _fetchMissions();
+    });
   }
 
   final Set<int> _listeningMissions = {};
@@ -96,7 +105,9 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
 
   @override
   void dispose() {
+    _refreshSubscription?.cancel();
     _trackingTimer?.cancel();
+    _tabController.dispose();
     super.dispose();
   }
 
@@ -154,6 +165,7 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
     }
 
     try {
+      HapticFeedback.mediumImpact();
       await ProviderRepository().updateMissionStatus(
         id,
         status,
@@ -167,6 +179,7 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
       }
 
       _refresh();
+      WebSocketService().triggerManualRefresh();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -185,6 +198,72 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
         );
       }
     }
+  }
+
+  void _callPhoneNumber(String? phone) async {
+    if (phone == null) return;
+    final uri = Uri.parse("tel:$phone");
+    if (await url.canLaunchUrl(uri)) {
+      await url.launchUrl(uri);
+    }
+  }
+
+  String _getRelativeTime(DateTime date) {
+    final now = DateTime.now();
+    final difference = date.difference(now);
+
+    if (difference.inDays == 0) {
+      if (difference.inMinutes.abs() < 60) {
+        return difference.isNegative
+            ? "Lancé il y a ${difference.inMinutes.abs()} min"
+            : "Dans ${difference.inMinutes.abs().toInt()} min";
+      }
+      return "Aujourd'hui à ${DateFormat('HH:mm').format(date)}";
+    } else if (difference.inDays == 1) {
+      return "Demain à ${DateFormat('HH:mm').format(date)}";
+    }
+    return DateFormat('dd/MM HH:mm').format(date);
+  }
+
+  Widget _buildQuickStats() {
+    final pendingCount =
+        _reservations?.where((r) => r.status == 'pending').length ?? 0;
+    final activeCount =
+        _reservations
+            ?.where(
+              (r) =>
+                  ['confirmed', 'accepted', 'in_progress'].contains(r.status),
+            )
+            .length ??
+        0;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildStatItem(pendingCount.toString(), "Attente", Colors.orange),
+        const SizedBox(width: 12),
+        _buildStatItem(activeCount.toString(), "Cours", AppTheme.primary),
+      ],
+    );
+  }
+
+  Widget _buildStatItem(String value, String label, Color color) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(color: Colors.grey.shade500, fontSize: 10),
+        ),
+      ],
+    );
   }
 
   Future<String?> _showCancellationDialog() async {
@@ -246,13 +325,25 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    "Gestion des Missions",
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
-                      color: AppTheme.textDark,
-                    ),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Gestion des Missions",
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w900,
+                                color: AppTheme.textDark,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      _buildQuickStats(),
+                    ],
                   ),
                   const SizedBox(height: 16),
                   Container(
@@ -405,6 +496,7 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
         itemCount: list.length,
         separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
+          if (index >= list.length) return const SizedBox.shrink();
           final r = list[index];
           return _buildCard(
             r,
@@ -425,7 +517,6 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
   }) {
     return Container(
       key: key,
-      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
@@ -502,49 +593,62 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
                     );
                   },
                 ),
-                // Chat Button
-                Container(
-                  decoration: BoxDecoration(
-                    color: AppTheme.primary.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: IconButton(
-                    icon: const Icon(
-                      Icons.chat_bubble_outline,
-                      color: AppTheme.primary,
-                      size: 20,
+                // Call Button (for active missions)
+                if (isActive || isPending)
+                  IconButton(
+                    icon: Icon(
+                      Icons.phone_in_talk_rounded,
+                      color: Colors.green.shade600,
+                      size: 22,
                     ),
                     onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => ChatScreen(
-                            reservationId: r.id,
-                            otherUserName: r.clientName ?? 'Client',
-                          ),
-                        ),
-                      );
+                      HapticFeedback.selectionClick();
+                      _callPhoneNumber(r.clientPhone);
                     },
                   ),
+
+                // Chat Button
+                IconButton(
+                  icon: const Icon(
+                    Icons.chat_bubble_outline_rounded,
+                    color: AppTheme.primary,
+                    size: 20,
+                  ),
+                  onPressed: () {
+                    HapticFeedback.selectionClick();
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ChatScreen(
+                          reservationId: r.id,
+                          otherUserName: r.clientName ?? 'Client',
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
           ),
 
-          // Date & Status
+          // Date, Relative Time & Status
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
                 Icon(
-                  Icons.calendar_today,
+                  Icons.access_time_rounded,
                   size: 16,
-                  color: Colors.grey.shade600,
+                  color: AppTheme.primary,
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  "${r.requestedDate.day}/${r.requestedDate.month}/${r.requestedDate.year} à ${r.requestedDate.hour}h${r.requestedDate.minute.toString().padLeft(2, '0')}",
-                  style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                  _getRelativeTime(r.requestedDate),
+                  style: const TextStyle(
+                    color: AppTheme.primary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
                 ),
                 const Spacer(),
                 Container(
@@ -569,19 +673,78 @@ class _ProviderMissionsTabState extends State<ProviderMissionsTab>
             ),
           ),
 
-          if (r.description != null && r.description!.isNotEmpty) ...[
+          if (r.address != null && r.address!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.location_on_outlined,
+                    size: 16,
+                    color: Colors.grey.shade600,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      r.address!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if ((r.description != null && r.description!.isNotEmpty) ||
+              r.audioDescription != null) ...[
             const SizedBox(height: 12),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Container(
+                width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade50,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Text(
-                  r.description!,
-                  style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (r.audioDescription != null)
+                      Row(
+                        children: [
+                          Icon(Icons.mic, size: 16, color: AppTheme.primary),
+                          const SizedBox(width: 4),
+                          const Text(
+                            "Description audio disponible",
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.primary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    if (r.audioDescription != null &&
+                        r.description != null &&
+                        r.description!.isNotEmpty)
+                      const SizedBox(height: 4),
+                    if (r.description != null && r.description!.isNotEmpty)
+                      Text(
+                        r.description!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.grey.shade700,
+                          fontSize: 13,
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),

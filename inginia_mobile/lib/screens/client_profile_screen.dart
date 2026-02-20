@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../providers/auth_provider.dart';
@@ -21,6 +22,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
       MaterialPageRoute(builder: (_) => const EditProfileScreen()),
     );
   }
+
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().user;
@@ -275,6 +277,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                     ),
                     child: TextButton.icon(
                       onPressed: () {
+                        HapticFeedback.mediumImpact();
                         showDialog(
                           context: context,
                           builder: (ctx) => AlertDialog(
@@ -298,6 +301,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                               ),
                               ElevatedButton(
                                 onPressed: () {
+                                  HapticFeedback.heavyImpact();
                                   Navigator.pop(ctx);
                                   context.read<AuthProvider>().logout();
                                 },

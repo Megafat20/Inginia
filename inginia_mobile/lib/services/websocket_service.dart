@@ -17,6 +17,20 @@ class WebSocketService {
   Timer? _heartbeatTimer;
   Timer? _reconnectTimer;
   final Set<String> _subscribedChannels = {};
+  final Map<String, List<Function(dynamic)>> _callbacks = {};
+  final StreamController<Map<String, dynamic>> _eventStreamController =
+      StreamController<Map<String, dynamic>>.broadcast();
+
+  Stream<Map<String, dynamic>> get eventStream => _eventStreamController.stream;
+
+  final StreamController<void> _manualRefreshController =
+      StreamController<void>.broadcast();
+  Stream<void> get manualRefreshStream => _manualRefreshController.stream;
+
+  void triggerManualRefresh() {
+    print("🔄 Triggering manual refresh for all listeners");
+    _manualRefreshController.add(null);
+  }
 
   Future<void> init() async {
     if (_isConnected || _isConnecting) return;
@@ -96,7 +110,12 @@ class WebSocketService {
     });
   }
 
-  final Map<String, Function(dynamic)> _callbacks = {};
+  void _addCallback(String channel, Function(dynamic) callback) {
+    if (!_callbacks.containsKey(channel)) {
+      _callbacks[channel] = [];
+    }
+    _callbacks[channel]!.add(callback);
+  }
 
   String? _socketId;
 
@@ -133,13 +152,20 @@ class WebSocketService {
 
         // Call specific channel callback with EVENT and DATA
         if (channel != null && _callbacks.containsKey(channel)) {
-          // Note: we might want to pass the event name too so the callback knows what happened
-          // For now, let's inject it into the data if it's a map
           if (finalData is Map<String, dynamic>) {
             finalData['_event'] = event;
           }
-          _callbacks[channel]!(finalData);
+          for (var callback in _callbacks[channel]!) {
+            callback(finalData);
+          }
         }
+
+        // Emit globally
+        _eventStreamController.add({
+          'channel': channel,
+          'event': event,
+          'data': finalData,
+        });
       }
 
       // Log for debug if needed
@@ -158,7 +184,7 @@ class WebSocketService {
 
   Future<void> listenToUserUpdates(int userId, Function(dynamic) onData) async {
     final channel = 'private-user.$userId';
-    _callbacks[channel] = onData;
+    _addCallback(channel, onData);
     _subscribe(channel);
   }
 
@@ -166,17 +192,14 @@ class WebSocketService {
     int reservationId,
     Function(dynamic) onData,
   ) async {
-    // Le backend doit utiliser PrivateChannel('reservation.$id')
-    // Le WebSocket ajoute le préfixe 'private-' pour l'auth
     final channel = 'private-reservation.$reservationId';
-    _callbacks[channel] = onData;
+    _addCallback(channel, onData);
     _subscribe(channel);
   }
 
   Future<void> listenToChat(int reservationId, Function(dynamic) onData) async {
-    // Canal défini dans routes/channels.php : chat.{id}
     final channel = 'private-chat.$reservationId';
-    _callbacks[channel] = onData;
+    _addCallback(channel, onData);
     _subscribe(channel);
   }
 
@@ -248,7 +271,7 @@ class WebSocketService {
   Future<void> listenToGlobalUserEvents(int userId) async {
     final channel = 'private-user.$userId';
     _subscribe(channel);
-    _callbacks[channel] = (data) {
+    _addCallback(channel, (data) {
       // Analyze event type and show notification
       // Data usually comes with an '_event' key if we injected it, or we rely on the implementation to pass it.
       // In _handleMessage, I need to ensure event name is passed.
@@ -321,7 +344,7 @@ class WebSocketService {
           ),
         );
       }
-    };
+    });
   }
 
   Future<void> dispose() async {

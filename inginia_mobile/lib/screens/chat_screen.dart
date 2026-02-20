@@ -359,12 +359,15 @@ class _ChatScreenState extends State<ChatScreen> {
     return '$root/storage/$path';
   }
 
-  Future<void> _pickImage() async {
+  Future<void> _pickAndSendImage({
+    ImageSource source = ImageSource.gallery,
+  }) async {
     final XFile? image = await _picker.pickImage(
-      source: ImageSource.gallery,
+      source: source,
       imageQuality: 70,
     );
     if (image != null) {
+      setState(() => _isSending = true);
       try {
         final newMessage = await _repository.sendMessage(
           widget.reservationId,
@@ -374,15 +377,173 @@ class _ChatScreenState extends State<ChatScreen> {
         if (mounted) {
           setState(() {
             _messages.add(newMessage);
+            _isSending = false;
           });
           _scrollToBottom();
         }
       } catch (e) {
         if (mounted) {
+          setState(() => _isSending = false);
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(SnackBar(content: Text("Erreur d'envoi d'image: $e")));
         }
+      }
+    }
+  }
+
+  Future<void> _showProposePriceDialog() async {
+    final priceController = TextEditingController();
+    final noteController = TextEditingController();
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.payments_rounded,
+                      color: Colors.green,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Proposer un prix',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Le client recevra votre proposition et pourra l\'accepter ou la refuser.',
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: priceController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'Montant (FCFA)',
+                  prefixIcon: const Icon(Icons.attach_money_rounded),
+                  suffixText: 'F',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: noteController,
+                decoration: InputDecoration(
+                  labelText: 'Note (optionnel)',
+                  hintText: 'Ex: Comprend les pièces et la main d\'œuvre',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                maxLines: 2,
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  final price = double.tryParse(priceController.text);
+                  if (price == null || price <= 0) return;
+                  Navigator.pop(ctx);
+                  setState(() => _isSending = true);
+                  try {
+                    final msg = await _repository.proposePrice(
+                      widget.reservationId,
+                      price,
+                      note: noteController.text,
+                    );
+                    if (mounted) {
+                      setState(() {
+                        if (!_messages.any((m) => m.id == msg.id)) {
+                          _messages.add(msg);
+                        }
+                        _isSending = false;
+                      });
+                      _scrollToBottom();
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      setState(() => _isSending = false);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Erreur: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                },
+                icon: const Icon(Icons.send_rounded),
+                label: const Text('Envoyer la proposition'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _respondToPrice(int messageId, String response) async {
+    try {
+      final result = await _repository.respondToPrice(messageId, response);
+      // Reload messages to get updated status
+      await _fetchMessages(silent: false);
+      if (mounted && response == 'accepted') {
+        final finalPrice = result['reservation']?['final_price'];
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Prix de ${finalPrice ?? ''} F confirmé ! 🎉'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+        );
       }
     }
   }
@@ -679,39 +840,45 @@ class _ChatScreenState extends State<ChatScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (msg.imageUrl != null) ...[
-                  GestureDetector(
-                    onTap: () =>
-                        _showFullScreenImage(_getMediaUrl(msg.imageUrl)),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.network(
-                        _getMediaUrl(msg.imageUrl),
-                        width: 200,
-                        fit: BoxFit.cover,
+                if (msg.type == 'price_proposal') ...[
+                  _buildPriceProposalBubble(msg, isMe),
+                ] else ...[
+                  if (msg.imageUrl != null) ...[
+                    GestureDetector(
+                      onTap: () =>
+                          _showFullScreenImage(_getMediaUrl(msg.imageUrl)),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.network(
+                          _getMediaUrl(msg.imageUrl),
+                          width: 200,
+                          fit: BoxFit.cover,
+                        ),
                       ),
                     ),
-                  ),
+                  ],
+                  if (msg.audioUrl != null)
+                    VoiceNoteBubble(
+                      audioUrl: _getMediaUrl(msg.audioUrl),
+                      isMe: isMe,
+                    ),
+                  if (msg.content.isNotEmpty)
+                    Padding(
+                      padding: EdgeInsets.only(
+                        top: msg.imageUrl != null || msg.audioUrl != null
+                            ? 8
+                            : 0,
+                      ),
+                      child: Text(
+                        msg.content,
+                        style: TextStyle(
+                          color: isMe ? Colors.white : const Color(0xFF333333),
+                          fontSize: 15,
+                          height: 1.3,
+                        ),
+                      ),
+                    ),
                 ],
-                if (msg.audioUrl != null)
-                  VoiceNoteBubble(
-                    audioUrl: _getMediaUrl(msg.audioUrl),
-                    isMe: isMe,
-                  ),
-                if (msg.content.isNotEmpty)
-                  Padding(
-                    padding: EdgeInsets.only(
-                      top: msg.imageUrl != null || msg.audioUrl != null ? 8 : 0,
-                    ),
-                    child: Text(
-                      msg.content,
-                      style: TextStyle(
-                        color: isMe ? Colors.white : const Color(0xFF333333),
-                        fontSize: 15,
-                        height: 1.3,
-                      ),
-                    ),
-                  ),
                 const SizedBox(height: 4),
                 Row(
                   mainAxisSize: MainAxisSize.min,
@@ -742,6 +909,130 @@ class _ChatScreenState extends State<ChatScreen> {
         .animate()
         .fadeIn(duration: 200.ms)
         .scale(begin: const Offset(0.95, 0.95), end: const Offset(1, 1));
+  }
+
+  Widget _buildPriceProposalBubble(Message msg, bool isMe) {
+    final price = msg.proposedPrice ?? 0;
+    final status = msg.priceStatus ?? 'pending';
+    final isClient = !isMe;
+
+    Color statusColor = Colors.orange;
+    IconData statusIcon = Icons.hourglass_empty_rounded;
+    String statusText = 'En attente de réponse...';
+    if (status == 'accepted') {
+      statusColor = Colors.green;
+      statusIcon = Icons.check_circle_rounded;
+      statusText = 'Accepté ✅';
+    } else if (status == 'refused') {
+      statusColor = Colors.red;
+      statusIcon = Icons.cancel_rounded;
+      statusText = 'Refusé ❌';
+    }
+
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 280),
+      decoration: BoxDecoration(
+        color: isMe ? Colors.white : Colors.green.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: statusColor.withOpacity(0.4), width: 1.5),
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.payments_rounded, color: statusColor, size: 18),
+              const SizedBox(width: 6),
+              Text(
+                'Proposition de prix',
+                style: TextStyle(
+                  color: statusColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 14),
+          Text(
+            '${price.toStringAsFixed(0)} FCFA',
+            style: const TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF1a1a2e),
+            ),
+          ),
+          if (msg.content.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              msg.content,
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            ),
+          ],
+          const SizedBox(height: 10),
+          // Statut
+          Row(
+            children: [
+              Icon(statusIcon, size: 14, color: statusColor),
+              const SizedBox(width: 4),
+              Text(
+                statusText,
+                style: TextStyle(
+                  color: statusColor,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          // Boutons pour le client si pending
+          if (isClient && status == 'pending') ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => _respondToPrice(msg.id, 'refused'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      side: const BorderSide(color: Colors.red),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: const Text(
+                      'Refuser',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => _respondToPrice(msg.id, 'accepted'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: const Text(
+                      'Accepter',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   void _showFullScreenImage(String url) {
@@ -779,19 +1070,36 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildNormalInputUI() {
+    final isProvider = context.read<AuthProvider>().user?.role == 'prestataire';
     return Row(
       children: [
+        // Image picker
         IconButton(
-          onPressed: _pickImage,
+          onPressed: () => _pickAndSendImage(),
           icon: Icon(
-            Icons.add_circle_outline,
+            Icons.image_outlined,
             color: AppTheme.primary.withOpacity(0.8),
-            size: 26,
+            size: 24,
           ),
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(),
         ),
-        const SizedBox(width: 12),
+        // Prix (prestataire seulement)
+        if (isProvider) ...[
+          const SizedBox(width: 6),
+          IconButton(
+            onPressed: _showProposePriceDialog,
+            icon: const Icon(
+              Icons.payments_outlined,
+              color: Colors.green,
+              size: 24,
+            ),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            tooltip: 'Proposer un prix',
+          ),
+        ],
+        const SizedBox(width: 10),
         Expanded(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),

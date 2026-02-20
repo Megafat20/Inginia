@@ -85,8 +85,10 @@ class _AdminProvidersScreenState extends State<AdminProvidersScreen> {
           comparison = (a['name'] ?? '').compareTo(b['name'] ?? '');
           break;
         case 'balance':
-          final balanceA = (a['balance'] ?? 0).toDouble();
-          final balanceB = (b['balance'] ?? 0).toDouble();
+          final balanceA =
+              double.tryParse((a['balance'] ?? 0).toString()) ?? 0.0;
+          final balanceB =
+              double.tryParse((b['balance'] ?? 0).toString()) ?? 0.0;
           comparison = balanceA.compareTo(balanceB);
           break;
         case 'date':
@@ -290,7 +292,8 @@ class _AdminProvidersScreenState extends State<AdminProvidersScreen> {
   }
 
   Widget _buildProviderCard(Map<String, dynamic> provider) {
-    final balance = (provider['balance'] ?? 0).toDouble();
+    final balance =
+        double.tryParse((provider['balance'] ?? 0).toString()) ?? 0.0;
     final isValidated = provider['is_validated'] ?? false;
     final isAgency = provider['is_agency'] ?? false;
 
@@ -442,21 +445,462 @@ class _AdminProvidersScreenState extends State<AdminProvidersScreen> {
   }
 }
 
-// Placeholder pour l'écran de détail (à implémenter)
-class AdminProviderWalletDetailScreen extends StatelessWidget {
+// Écran détail prestataire - Missions & Commissions
+class AdminProviderWalletDetailScreen extends StatefulWidget {
   final int providerId;
-
   const AdminProviderWalletDetailScreen({super.key, required this.providerId});
+
+  @override
+  State<AdminProviderWalletDetailScreen> createState() =>
+      _AdminProviderWalletDetailScreenState();
+}
+
+class _AdminProviderWalletDetailScreenState
+    extends State<AdminProviderWalletDetailScreen> {
+  final ApiService _api = ApiService();
+  bool _isLoading = true;
+  Map<String, dynamic>? _provider;
+  Map<String, dynamic>? _stats;
+  List<Map<String, dynamic>> _missions = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchData();
+  }
+
+  Future<void> _fetchData() async {
+    setState(() => _isLoading = true);
+    try {
+      final response = await _api.client.get(
+        '/admin/providers/${widget.providerId}/reservations',
+      );
+      final data = response.data as Map<String, dynamic>;
+      setState(() {
+        _provider = Map<String, dynamic>.from(data['provider']);
+        _stats = Map<String, dynamic>.from(data['stats']);
+        _missions = List<Map<String, dynamic>>.from(data['reservations']);
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'completed':
+        return Colors.teal;
+      case 'pending':
+        return Colors.orange;
+      case 'accepted':
+      case 'confirmed':
+        return Colors.green;
+      case 'in_progress':
+        return Colors.blue;
+      case 'cancelled':
+      case 'declined':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'completed':
+        return 'Terminée';
+      case 'pending':
+        return 'En attente';
+      case 'accepted':
+        return 'Acceptée';
+      case 'confirmed':
+        return 'Confirmée';
+      case 'in_progress':
+        return 'En cours';
+      case 'cancelled':
+        return 'Annulée';
+      case 'declined':
+        return 'Refusée';
+      default:
+        return status;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: const Text('Détails Prestataire'),
+        title: Text(
+          _provider?['name'] ?? 'Détails Prestataire',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: AppTheme.primary,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: _fetchData,
+          ),
+        ],
       ),
-      body: Center(child: Text('Détails du prestataire #$providerId')),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _fetchData,
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  // ── Info Prestataire ──────────────────────────
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [AppTheme.primary, AppTheme.primaryDark],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 30,
+                          backgroundColor: Colors.white.withOpacity(0.2),
+                          child: Text(
+                            (_provider?['name'] ?? '?')[0].toUpperCase(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 24,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _provider?['name'] ?? 'N/A',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              ),
+                              Text(
+                                _provider?['email'] ?? '',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.8),
+                                  fontSize: 13,
+                                ),
+                              ),
+                              Text(
+                                _provider?['phone'] ?? '',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.8),
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            const Text(
+                              'Solde',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                            Text(
+                              '${(double.tryParse((_provider?['balance'] ?? 0).toString()) ?? 0).toStringAsFixed(0)} F',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 22,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // ── KPI Cards ────────────────────────────────
+                  GridView.count(
+                    crossAxisCount: 2,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 1.6,
+                    children: [
+                      _buildKpiCard(
+                        'Total Missions',
+                        '${_stats?['total_missions'] ?? 0}',
+                        Icons.assignment_rounded,
+                        Colors.blue,
+                      ),
+                      _buildKpiCard(
+                        'Terminées',
+                        '${_stats?['completed'] ?? 0}',
+                        Icons.check_circle_rounded,
+                        Colors.teal,
+                      ),
+                      _buildKpiCard(
+                        'Montant Gagné',
+                        '${(double.tryParse((_stats?['total_earned'] ?? 0).toString()) ?? 0).toStringAsFixed(0)} F',
+                        Icons.payments_rounded,
+                        Colors.green,
+                      ),
+                      _buildKpiCard(
+                        'Commissions',
+                        '${(double.tryParse((_stats?['total_commissions'] ?? 0).toString()) ?? 0).toStringAsFixed(0)} F',
+                        Icons.percent_rounded,
+                        Colors.orange,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // ── Liste des Missions ────────────────────────
+                  const Text(
+                    'Historique des Missions',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textDark,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_missions.isEmpty)
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(40),
+                        child: Column(
+                          children: [
+                            Icon(
+                              Icons.assignment_outlined,
+                              size: 60,
+                              color: Colors.grey.shade300,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Aucune mission pour ce prestataire',
+                              style: TextStyle(color: Colors.grey.shade500),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    ...(_missions.map((mission) {
+                      final status = mission['status'] ?? 'pending';
+                      final price =
+                          double.tryParse((mission['price'] ?? 0).toString()) ??
+                          0.0;
+                      final commission =
+                          double.tryParse(
+                            (mission['commission'] ?? 0).toString(),
+                          ) ??
+                          0.0;
+                      final priceSource =
+                          mission['price_source'] ?? 'catalogue';
+                      final hasFinalPrice = mission['final_price'] != null;
+                      final date = mission['requested_date'] != null
+                          ? DateTime.tryParse(mission['requested_date'])
+                          : null;
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.04),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: _statusColor(status).withOpacity(0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.work_outline_rounded,
+                                color: _statusColor(status),
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    mission['service_title'] ??
+                                        'Service personnalisé',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    mission['client_name'] ?? 'Client',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  if (date != null)
+                                    Text(
+                                      '${date.day}/${date.month}/${date.year}',
+                                      style: TextStyle(
+                                        color: Colors.grey.shade400,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _statusColor(
+                                      status,
+                                    ).withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    _statusLabel(status),
+                                    style: TextStyle(
+                                      color: _statusColor(status),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                // Badge si prix négocié
+                                if (hasFinalPrice)
+                                  Container(
+                                    margin: const EdgeInsets.only(bottom: 2),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.shade50,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: Colors.green.shade200,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      '✓ Prix négocié',
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        color: Colors.green.shade700,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                Text(
+                                  price > 0
+                                      ? '${price.toStringAsFixed(0)} F'
+                                      : 'Prix non défini',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: price > 0
+                                        ? AppTheme.textDark
+                                        : Colors.grey,
+                                  ),
+                                ),
+                                Text(
+                                  commission > 0
+                                      ? 'Com: ${commission.toStringAsFixed(0)} F (5%)'
+                                      : 'Commission: N/A',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.orange.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList()),
+                ],
+              ),
+            ),
+    );
+  }
+
+  Widget _buildKpiCard(String label, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Icon(icon, color: color, size: 22),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
+              Text(
+                label,
+                style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme/app_theme.dart';
 import '../../models/provider_details_model.dart';
@@ -10,6 +11,10 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:record/record.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
 import '../../models/availability_model.dart';
 
 class ReservationModal extends StatefulWidget {
@@ -51,6 +56,13 @@ class _ReservationModalState extends State<ReservationModal> {
   final _descriptionController = TextEditingController();
   Position? _currentPosition;
 
+  // Audio Recording
+  final _audioRecorder = AudioRecorder();
+  final _audioPlayer = AudioPlayer();
+  bool _isRecording = false;
+  String? _audioPath;
+  bool _isPlaying = false;
+
   // Search Logic
   List<Map<String, dynamic>> _locationSuggestions = [];
   bool _isSearchingLocation = false;
@@ -62,6 +74,79 @@ class _ReservationModalState extends State<ReservationModal> {
     super.initState();
     _loadDraft();
     _initLocation();
+    _audioPlayer.onPlayerComplete.listen((event) {
+      if (mounted) setState(() => _isPlaying = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _audioRecorder.dispose();
+    _audioPlayer.dispose();
+    _addressController.dispose();
+    _addressNotesController.dispose();
+    _otherServiceController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _startRecording() async {
+    try {
+      if (await _audioRecorder.hasPermission()) {
+        final dir = await getTemporaryDirectory();
+        final path =
+            '${dir.path}/desc_${DateTime.now().millisecondsSinceEpoch}.m4a';
+
+        await _audioRecorder.start(const RecordConfig(), path: path);
+        setState(() {
+          _isRecording = true;
+          _audioPath = null;
+        });
+        HapticFeedback.mediumImpact();
+      }
+    } catch (e) {
+      print("Record error: $e");
+    }
+  }
+
+  Future<void> _stopRecording() async {
+    try {
+      final path = await _audioRecorder.stop();
+      setState(() {
+        _isRecording = false;
+        _audioPath = path;
+      });
+      HapticFeedback.lightImpact();
+    } catch (e) {
+      print("Stop error: $e");
+    }
+  }
+
+  Future<void> _togglePlayback() async {
+    if (_audioPath == null) return;
+    try {
+      if (_isPlaying) {
+        await _audioPlayer.pause();
+        setState(() => _isPlaying = false);
+      } else {
+        await _audioPlayer.play(DeviceFileSource(_audioPath!));
+        setState(() => _isPlaying = true);
+      }
+    } catch (e) {
+      print("Playback error: $e");
+    }
+  }
+
+  void _deleteAudio() {
+    if (_audioPath != null) {
+      final file = File(_audioPath!);
+      if (file.existsSync()) file.deleteSync();
+      setState(() {
+        _audioPath = null;
+        _isPlaying = false;
+      });
+      _audioPlayer.stop();
+    }
   }
 
   Future<void> _initLocation() async {
@@ -211,10 +296,13 @@ class _ReservationModalState extends State<ReservationModal> {
         _showError("Veuillez préciser le service souhaité.");
         return;
       }
-      if (_descriptionController.text.trim().isEmpty) {
-        _showError("Veuillez ajouter une description.");
+      // Description is now optional as per user request
+      /*
+      if (_descriptionController.text.trim().isEmpty && _audioPath == null) {
+        _showError("Veuillez ajouter une description (texte ou audio).");
         return;
       }
+      */
     }
 
     if (_currentStep < _totalSteps - 1) {
@@ -298,6 +386,10 @@ class _ReservationModalState extends State<ReservationModal> {
             : null,
         latitude: lat,
         longitude: lng,
+        address: _addressController.text.isNotEmpty
+            ? _addressController.text
+            : null,
+        audioDescriptionPath: _audioPath,
       );
 
       await _clearDraft();
@@ -943,17 +1035,126 @@ class _ReservationModalState extends State<ReservationModal> {
           ),
           const SizedBox(height: 8),
           const Text(
-            "Détaillez votre besoin pour aider le prestataire.",
+            "Détaillez votre besoin (texte ou audio).",
             style: TextStyle(color: Colors.grey),
           ),
           const SizedBox(height: 24),
 
+          // Audio Description Section
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppTheme.primary.withOpacity(0.1)),
+            ),
+            child: Column(
+              children: [
+                if (_audioPath == null && !_isRecording)
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          "Ajouter une description audio",
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textDark,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: _startRecording,
+                        icon: const Icon(
+                          Icons.mic_none_rounded,
+                          color: AppTheme.primary,
+                          size: 28,
+                        ),
+                      ),
+                    ],
+                  )
+                else if (_isRecording)
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          "Enregistrement en cours...",
+                          style: TextStyle(
+                            color: Colors.red,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.red,
+                        ),
+                      ).animate(onPlay: (c) => c.repeat()).fade().scale(),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        onPressed: _stopRecording,
+                        icon: const Icon(
+                          Icons.stop_circle_rounded,
+                          color: Colors.red,
+                          size: 32,
+                        ),
+                      ),
+                    ],
+                  )
+                else if (_audioPath != null)
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.audiotrack_rounded,
+                          color: AppTheme.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          "Description audio enregistrée",
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: _togglePlayback,
+                        icon: Icon(
+                          _isPlaying
+                              ? Icons.pause_circle_filled_rounded
+                              : Icons.play_circle_fill_rounded,
+                          color: AppTheme.primary,
+                          size: 32,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: _deleteAudio,
+                        icon: const Icon(
+                          Icons.delete_outline_rounded,
+                          color: Colors.red,
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
           TextFormField(
             controller: _descriptionController,
-            maxLines: 6,
+            maxLines: 4,
             decoration: InputDecoration(
               hintText:
-                  "Ex: J'ai besoin d'une réparation sur mon climatiseur qui fuit...",
+                  "Complément d'information par écrit (Optionnel si audio)...",
               fillColor: Colors.grey.shade50,
               filled: true,
               border: OutlineInputBorder(
@@ -1064,6 +1265,16 @@ class _ReservationModalState extends State<ReservationModal> {
                   _addressMode == 'gps'
                       ? "Position GPS actuelle"
                       : _addressController.text,
+                ),
+                const Divider(height: 30),
+                _buildSummaryRow(
+                  Icons.description,
+                  "Description",
+                  _audioPath != null
+                      ? "Audio + ${_descriptionController.text.isNotEmpty ? 'Texte' : 'Sans texte'}"
+                      : (_descriptionController.text.isNotEmpty
+                            ? _descriptionController.text
+                            : "Non spécifié"),
                 ),
               ],
             ),

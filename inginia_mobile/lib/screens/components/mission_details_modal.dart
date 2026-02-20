@@ -4,6 +4,7 @@ import '../../models/reservation_model.dart';
 import '../../repositories/provider_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../services/api_service.dart';
+import '../../widgets/voice_note_bubble.dart';
 
 class MissionDetailsModal extends StatefulWidget {
   final Reservation reservation;
@@ -75,8 +76,13 @@ class _MissionDetailsModalState extends State<MissionDetailsModal> {
   String _getImageUrl(String path) {
     if (path.startsWith('http')) return path;
     final apiBase = ApiService.baseUrl;
-    // Usually http://10.0.2.2:8000/api
-    // We need root: http://10.0.2.2:8000
+    final root = apiBase.replaceAll('/api', '');
+    return '$root/storage/$path';
+  }
+
+  String _getAudioUrl(String path) {
+    if (path.startsWith('http')) return path;
+    final apiBase = ApiService.baseUrl;
     final root = apiBase.replaceAll('/api', '');
     return '$root/storage/$path';
   }
@@ -160,6 +166,15 @@ class _MissionDetailsModalState extends State<MissionDetailsModal> {
                       "Prix estimé",
                       "${_reservation.price} FCFA",
                     ),
+                  if (_reservation.address != null &&
+                      _reservation.address!.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    _buildInfoRow(
+                      Icons.location_on_outlined,
+                      "Adresse",
+                      _reservation.address!,
+                    ),
+                  ],
 
                   const SizedBox(height: 24),
                   const Text(
@@ -175,9 +190,35 @@ class _MissionDetailsModalState extends State<MissionDetailsModal> {
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: Colors.grey.shade200),
                     ),
-                    child: Text(
-                      _reservation.description ?? "Aucune description.",
-                      style: TextStyle(color: Colors.grey.shade800),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (_reservation.audioDescription != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: VoiceNoteBubble(
+                              audioUrl: _getAudioUrl(
+                                _reservation.audioDescription!,
+                              ),
+                              isMe: false, // Provider viewing it
+                            ),
+                          ),
+                        if (_reservation.description != null &&
+                            _reservation.description!.isNotEmpty)
+                          Text(
+                            _reservation.description!,
+                            style: TextStyle(color: Colors.grey.shade800),
+                          )
+                        else if (_reservation.audioDescription == null)
+                          const Text(
+                            "Aucune description texte fournie.",
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontStyle: FontStyle.italic,
+                              fontSize: 13,
+                            ),
+                          ),
+                      ],
                     ),
                   ),
 
@@ -315,18 +356,24 @@ class _MissionDetailsModalState extends State<MissionDetailsModal> {
           child: Icon(icon, size: 20, color: Colors.grey.shade700),
         ),
         const SizedBox(width: 16),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-            ),
-            Text(
-              value,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-            ),
-          ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+              ),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 15,
+                ),
+                overflow: TextOverflow.visible,
+              ),
+            ],
+          ),
         ),
       ],
     );
